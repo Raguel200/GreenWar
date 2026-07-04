@@ -1,0 +1,25 @@
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+# Archives compressées
+*.zip
+*.rar
+*.7z
+
+# Backups / temporaires
+*.bak
+*.tmp
+*.old
+
+# Logs
+*.log
+
+# Paramètres locaux VS Code
+.vscode/
+
+# Brouillons locaux
+archive/unsorted/
