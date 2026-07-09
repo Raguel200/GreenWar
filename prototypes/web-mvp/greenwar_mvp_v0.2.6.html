@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GreenWar v0.2.5 — Autoplay Test Harness</title>
+<style>
+:root{
+  --soil:#141008;
+  --soil2:#1D1810;
+  --parchment:#E4D6B4;
+  --parchment2:#D6C49A;
+  --ink:#2A3324;
+  --gold:#8A6F3C;
+  --gold-hi:#C2A05C;
+  --nour:#A6432E;
+  --nour2:#5C6B3C;
+  --hydro:#2E6B6B;
+  --hydro2:#173F3F;
+  --danger:#8E2B2B;
+  --ok:#5C7A3C;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--soil);
+  background-image:radial-gradient(ellipse at 50% -10%, #241C10 0%, var(--soil) 60%);
+  color:var(--parchment);
+  font-family:'Spectral',Georgia,serif;
+  min-height:100vh;
+  padding:14px;
+}
+h1{
+  font-family:'IM Fell English',Georgia,serif;
+  font-size:2rem;
+  letter-spacing:.06em;
+  color:var(--gold-hi);
+  text-align:center;
+}
+h1 .sub{font-size:.8rem;letter-spacing:.35em;color:var(--parchment2);display:block;font-style:italic}
+.wrap{max-width:1200px;margin:0 auto}
+
+/* ── Phase tracker ── */
+.phases{
+  display:flex;justify-content:center;gap:4px;margin:12px 0 8px;flex-wrap:wrap;
+}
+.status-banner{
+  display:flex;justify-content:center;align-items:center;text-align:center;
+  margin:0 auto 16px;padding:8px 14px;max-width:760px;
+  border:1px solid var(--gold);background:rgba(29,24,16,.78);color:var(--gold-hi);
+  font-family:'IBM Plex Mono',monospace;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;
+  box-shadow:0 0 14px rgba(194,160,92,.12);
+}
+.phase{
+  font-family:'IBM Plex Mono',monospace;font-size:.65rem;letter-spacing:.12em;
+  padding:6px 12px;border:1px solid #3A2F1C;color:#6E5F44;
+  background:var(--soil2);text-transform:uppercase;
+}
+.phase.active{
+  border-color:var(--gold-hi);color:var(--gold-hi);
+  box-shadow:0 0 12px rgba(194,160,92,.25);
+}
+
+.layout{display:grid;grid-template-columns:minmax(340px,560px) minmax(280px,1fr);gap:16px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}}
+
+/* ── Plateau ── */
+.board-frame{
+  border:3px solid var(--gold);outline:1px solid #4A3A1C;outline-offset:3px;
+  padding:6px;background:#0E0B06;align-self:start;
+}
+.board{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;aspect-ratio:1}
+.cell{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border:1px solid rgba(0,0,0,.5);
+  transition:box-shadow .12s;
+  min-height:0;
+}
+.cell .t{
+  position:absolute;top:2px;left:4px;font-family:'IBM Plex Mono',monospace;
+  font-size:.55rem;opacity:.55;letter-spacing:.05em;
+}
+.cell .poll{position:absolute;bottom:2px;right:4px;font-size:.6rem}
+.cell .unit{
+  font-size:clamp(1.1rem,3.5vw,1.7rem);line-height:1;
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,.7));
+}
+.cell .hp{
+  position:absolute;bottom:1px;left:3px;font-family:'IBM Plex Mono',monospace;
+  font-size:.55rem;font-weight:600;padding:0 3px;border-radius:2px;
+}
+.cell .hp.j1{background:var(--nour);color:#FFE9DC}
+.cell .hp.j2{background:var(--hydro);color:#DFF5F5}
+.cell .mkicons{position:absolute;top:2px;right:3px;font-size:.55rem}
+.cell.sel{box-shadow:inset 0 0 0 2px var(--gold-hi),0 0 10px rgba(194,160,92,.4)}
+.cell.mv{box-shadow:inset 0 0 0 2px var(--ok)}
+.cell.atk{box-shadow:inset 0 0 0 2px var(--danger)}
+.cell.spawn{box-shadow:inset 0 0 0 2px #7A6B2E}
+
+/* terrains */
+.SF{background:linear-gradient(135deg,#4A3826,#3A2C1C)}
+.CL{background:linear-gradient(135deg,#7A6B2E,#5E5122)}
+.ZH{background:linear-gradient(135deg,#2E4B42,#20362F)}
+.BA{background:linear-gradient(135deg,#1F5459,#153A3E)}
+.GN{background:linear-gradient(135deg,#26221E,#161311)}
+.RS{background:linear-gradient(135deg,#6B5B44,#514434)}
+
+/* ── Panneau droit ── */
+.panel{display:flex;flex-direction:column;gap:12px}
+.card{
+  background:linear-gradient(175deg,var(--parchment),var(--parchment2));
+  color:var(--ink);border:2px solid var(--gold);padding:10px 12px;
+}
+.card h2{
+  font-family:'IM Fell English',serif;font-size:1rem;letter-spacing:.04em;
+  border-bottom:1px solid rgba(42,51,36,.3);padding-bottom:4px;margin-bottom:6px;
+}
+.pj{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pj .name{font-weight:600;font-size:.9rem}
+.pj.j1 .name{color:var(--nour)}
+.pj.j2 .name{color:var(--hydro)}
+.pj .res{font-family:'IBM Plex Mono',monospace;font-size:.8rem}
+.pj.turn{outline:2px solid var(--gold);outline-offset:2px}
+.pv{font-family:'IBM Plex Mono',monospace;font-size:.72rem;opacity:.85}
+
+.inspector{min-height:64px;font-size:.85rem}
+.inspector .stats{font-family:'IBM Plex Mono',monospace;font-size:.78rem;margin-top:4px}
+.inspector .cap{font-style:italic;font-size:.78rem;margin-top:4px;opacity:.85}
+
+/* recrutement */
+.recruit{display:flex;flex-direction:column;gap:6px}
+.rbtn{
+  display:flex;justify-content:space-between;gap:8px;
+  font-family:'Spectral',serif;font-size:.82rem;
+  background:transparent;border:1px solid var(--gold);color:var(--ink);
+  padding:6px 8px;cursor:pointer;text-align:left;
+}
+.rbtn:hover:not(:disabled){background:rgba(138,111,60,.15)}
+.rbtn:disabled{opacity:.4;cursor:not-allowed}
+.rbtn .cost{font-family:'IBM Plex Mono',monospace;font-size:.75rem}
+.rbtn.picked{background:rgba(138,111,60,.25);outline:1px solid var(--gold)}
+
+/* dés */
+.dice-tray{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-height:44px}
+.dgroup{display:flex;gap:4px;align-items:center}
+.dlabel{font-family:'IBM Plex Mono',monospace;font-size:.65rem;letter-spacing:.1em}
+.die{
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.85rem;
+  border:1.5px solid var(--ink);background:#F2E8CE;color:#7A7060;
+}
+.die.hit{background:var(--ink);color:var(--gold-hi);border-color:var(--gold)}
+
+/* événements */
+.event .ename{font-weight:600}
+.event .etxt{font-size:.8rem;font-style:italic}
+.gncard{background:linear-gradient(175deg,#3A3530,#28241F);color:#CFC5B0;border-color:#555}
+.gncard h2{color:#D8CDB8;border-bottom-color:rgba(216,205,184,.25)}
+
+/* log */
+.log{
+  background:var(--soil2);border:1px solid #3A2F1C;color:#B8A87E;
+  font-family:'IBM Plex Mono',monospace;font-size:.68rem;line-height:1.5;
+  height:130px;overflow-y:auto;padding:8px 10px;
+}
+.log .r{color:#6E5F44}
+.log .hl{color:var(--gold-hi)}
+.log .dmg{color:#C86A5A}
+
+/* actions */
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button.act{
+  font-family:'IM Fell English',serif;font-size:.95rem;letter-spacing:.05em;
+  background:var(--soil2);color:var(--gold-hi);border:1.5px solid var(--gold);
+  padding:8px 18px;cursor:pointer;
+}
+button.act:hover:not(:disabled){background:#2A2214}
+button.act:disabled{opacity:.35;cursor:not-allowed}
+button.act.primary{background:var(--gold);color:#14100A}
+button.act.primary:hover{background:var(--gold-hi)}
+button.act.utility{font-size:.82rem;padding:7px 12px;color:var(--parchment2)}
+
+/* fin de partie */
+.overlay{
+  position:fixed;inset:0;background:rgba(10,8,4,.88);display:none;
+  align-items:center;justify-content:center;z-index:50;
+}
+.overlay.show{display:flex}
+.overlay .box{
+  background:linear-gradient(175deg,var(--parchment),var(--parchment2));
+  color:var(--ink);border:3px solid var(--gold);padding:32px 44px;text-align:center;max-width:440px;
+}
+.overlay h2{font-family:'IM Fell English',serif;font-size:1.6rem;margin-bottom:8px}
+.legend{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:#6E5F44;text-align:center;margin-top:8px;letter-spacing:.05em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GREENWAR <span class="sub">La guerre ne fut pas déclarée. Elle germa. — v0.2.5 Autoplay Test Harness</span></h1>
+
+  <div class="phases" id="phases"></div>
+  <div class="status-banner" id="statusBanner">Round 1 — Joueur actif — Phase</div>
+
+  <div class="layout">
+    <div>
+      <div class="board-frame"><div class="board" id="board"></div></div>
+      <div class="legend">SF Sol Fertile · CL Clairière · ZH Zone Humide · BA Bassin · GN Friche Gris-Noir · RS Rocaille</div>
+    </div>
+
+    <div class="panel">
+      <div class="card">
+        <div class="pj j1" id="pj1">
+          <span class="name">🍅 Nourricières</span>
+          <span class="res" id="res1"></span>
+          <span class="pv" id="pv1"></span>
+        </div>
+        <div style="height:6px"></div>
+        <div class="pj j2" id="pj2">
+          <span class="name">🪷 Hydrophytes</span>
+          <span class="res" id="res2"></span>
+          <span class="pv" id="pv2"></span>
+        </div>
+      </div>
+
+      <div class="card event" id="eventCard">
+        <h2>Événement naturel <span style="font-size:.65rem;font-weight:400;opacity:.6">(deck MVP 10/24)</span></h2>
+        <div class="ename" id="eName">—</div>
+        <div class="etxt" id="eTxt">Le monde retient son souffle.</div>
+      </div>
+
+      <div class="card event gncard" id="gnCard">
+        <h2>🏭 Gris-Noir <span style="font-size:.65rem;font-weight:400;opacity:.6">(deck complet 10)</span></h2>
+        <div class="ename" id="gnName">—</div>
+        <div class="etxt" id="gnTxt">Le béton attend son heure. Tous les 2 rounds.</div>
+      </div>
+
+      <div class="card">
+        <h2>Inspecteur</h2>
+        <div class="inspector" id="inspector">Clique une case ou une unité.</div>
+      </div>
+
+      <div class="card" id="recruitCard" style="display:none">
+        <h2>Croissance — recruter (1 max)</h2>
+        <div class="recruit" id="recruitList"></div>
+      </div>
+
+      <div class="card">
+        <h2>Autel des dés</h2>
+        <div class="dice-tray" id="dice">Les dés dorment.</div>
+      </div>
+
+      <div class="actions">
+        <button class="act primary" id="btnPhase">Commencer</button>
+        <button class="act utility" id="btnSkipMove">Passer Mouvement</button>
+        <button class="act utility" id="btnSkipCombat">Passer Combat</button>
+        <button class="act utility" id="btnCancel">Annuler sélection</button>
+        <button class="act utility" id="btnExport">Exporter log</button>
+        <button class="act utility" id="btnAutoplay">Autoplay x20</button>
+      </div>
+
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="box">
+  <h2 id="winTitle"></h2>
+  <p id="winTxt"></p>
+  <div style="height:14px"></div>
+  <button class="act primary" onclick="location.reload()">Rejouer</button>
+</div></div>
+
+<script>
+/* ══════════════ DONNÉES ══════════════ */
+const TERR = {
+  SF:{nom:"Sol Fertile", prod:{nut:1}},
+  CL:{nom:"Clairière", prod:{sol:1}},
+  ZH:{nom:"Zone Humide", prod:{eau:1}},
+  BA:{nom:"Bassin", prod:{eau:2}},
+  GN:{nom:"Friche Gris-Noir", prod:{}},
+  RS:{nom:"Rocaille Sèche", prod:{bio:1}},
+};
+const MAP = [
+  "SF","CL","SF","SF","CL","SF",
+  "CL","SF","RS","GN","RS","CL",
+  "ZH","BA","ZH","RS","SF","ZH",
+  "ZH","SF","RS","ZH","BA","ZH",
+  "CL","RS","GN","RS","ZH","CL",
+  "ZH","BA","ZH","ZH","BA","ZH",
+];
+const RES_ICON = {eau:"💧",nut:"🌱",sol:"☀️",bio:"🌿"};
+const MK_ICON = {entrave:"⛓",ralenti:"🐌",poll:"☠"};
+
+const UNITS = {
+  tomate:  {nom:"Tomate-Bastion",  ico:"🍅", f:1, mv:1, atk:1, def:3, vit:4, por:1,
+    cout:{eau:1,nut:1}, cap:"Coulis de Guerre : un ennemi qui la blesse au corps à corps est Ralenti (MV-1 à son prochain tour)."},
+  carotte: {nom:"Carotte-Perceuse",ico:"🥕", f:1, mv:2, atk:3, def:1, vit:2, por:1,
+    cout:{nut:1,sol:1}, cap:"Charge Racinaire : si elle a bougé de 2+ cases EN LIGNE DROITE ce tour, +1 dé ATK et ignore 1 dé DEF."},
+  haricot: {nom:"Haricot-Grimpeur",ico:"🫘", f:1, mv:3, atk:1, def:1, vit:2, por:1,
+    cout:{eau:1,bio:1}, cap:"Vrilles d'Abordage : chaque coup au corps à corps Entrave la cible (MV 0 à son prochain tour)."},
+  nenuphar:{nom:"Nénuphar-Sentinelle",ico:"🪷",f:2, mv:2, atk:1, def:3, vit:3, por:1,
+    cout:{eau:1,nut:1}, cap:"Racines aquatiques : perd 1 VIT/tour hors Zone Humide ou Bassin."},
+  roseau:  {nom:"Roseau-Harponneur",ico:"🎋",f:2, mv:2, atk:2, def:1, vit:2, por:3,
+    cout:{eau:1,sol:1}, cap:"Harpon Végétal : seule unité à Portée 3. Sniper de marais."},
+  algue:   {nom:"Algue-Enlaceuse", ico:"🐙", f:2, mv:2, atk:1, def:1, vit:3, por:1,
+    cout:{eau:1,bio:1}, cap:"Étreinte Vaseuse : quiconque l'attaque au corps à corps est Entravé, réussite ou non."},
+};
+const ROSTER = {1:["tomate","carotte","haricot"], 2:["nenuphar","roseau","algue"]};
+
+/* Deck naturel MVP réduit : 10 cartes sur 24.
+   Les cartes restantes nécessitent des mécaniques non implémentées en v0.2.2. */
+const EVENTS = [
+  {n:"Pluie Fine", t:"+1 Eau pour tous.", fx:s=>{gainRes(1,"eau",1);gainRes(2,"eau",1);}},
+  {n:"Soleil Cru", t:"+1 Ensoleillement pour tous. Nénuphars hors eau : -1 VIT.", fx:s=>{
+    gainRes(1,"sol",1);gainRes(2,"sol",1);
+    unitsOnBoard().forEach(u=>{if(u.type==="nenuphar"&&!isWet(u.cell))hurt(u,1,"Soleil Cru");});}},
+  {n:"Nuit Froide", t:"-1 dé ATK pour tous ce round.", fx:s=>{s.flags.nuit=true;}},
+  {n:"Floraison Soudaine", t:"+1 Biodiversité pour tous.", fx:s=>{gainRes(1,"bio",1);gainRes(2,"bio",1);}},
+  {n:"Pluie Acide", t:"Unités en Clairière : marqueur Pollution (-1 dé ATK permanent).", fx:s=>{
+    unitsOnBoard().forEach(u=>{if(MAP[u.cell]==="CL"){u.mk.poll=(u.mk.poll||0)+1;logMsg(`${UNITS[u.type].nom} pollué.`,"dmg");}});}},
+  {n:"Épandage de Pesticides", t:"Nourricières : -1 dé DEF ce round.", fx:s=>{s.flags.pesticides=true;}},
+  {n:"Smog Étouffant", t:"Aucun Ensoleillement produit ce round.", fx:s=>{s.flags.smog=true;}},
+  {n:"Source Cachée", t:"+2 Eau pour tous.", fx:s=>{gainRes(1,"eau",2);gainRes(2,"eau",2);}},
+  {n:"Pollinisation Massive", t:"Le recrutement est gratuit ce round.", fx:s=>{s.flags.pollin=true;}},
+  {n:"Sécheresse", t:"Zones Humides et Bassins ne produisent rien ce round.", fx:s=>{s.flags.secheresse=true;}},
+];
+
+/* Deck Gris-Noir complet — 10 cartes (Bible v0.2 §10) */
+const GRISNOIR = [
+  {n:"Avancée du Béton", t:"Une case vide devient Friche Gris-Noir. Pour toujours.", fx:s=>{
+    const empties=s.board.map((c,i)=>i).filter(i=>!s.board[i].unit&&MAP[i]!=="GN");
+    if(empties.length){const i=empties[Math.floor(Math.random()*empties.length)];
+      MAP[i]="GN";s.board[i].poll=0;logMsg(`La case ${lbl(i)} est bétonnée.`,"dmg");}}},
+  {n:"Épandage Chimique", t:"Tous les Sols Fertiles : +1 Pollution de terrain (production -1).", fx:s=>{
+    s.board.forEach((c,i)=>{if(MAP[i]==="SF")c.poll++;});}},
+  {n:"Smog Industriel", t:"Aucun Ensoleillement produit ce round.", fx:s=>{s.flags.smog=true;}},
+  {n:"Décharge Illégale", t:"+2 Pollution sur une Friche Gris-Noir existante.", fx:s=>{
+    const gn=s.board.map((c,i)=>i).filter(i=>MAP[i]==="GN");
+    if(gn.length){const i=gn[0];s.board[i].poll+=2;logMsg(`Décharge sur ${lbl(i)}.`,"dmg");}}},
+  {n:"Fuite de Nappe", t:"Une Zone Humide aléatoire ne produit rien ce round.", fx:s=>{
+    const zh=s.board.map((c,i)=>i).filter(i=>MAP[i]==="ZH");
+    if(zh.length){s.flags.fuite=zh[Math.floor(Math.random()*zh.length)];
+      logMsg(`Fuite de nappe en ${lbl(s.flags.fuite)}.`,"dmg");}}},
+  {n:"Machine d'Extraction", t:"Le joueur en tête (terrains) perd 2 ressources aléatoires.", fx:s=>{
+    const lead = controlled(1).length>=controlled(2).length?1:2;
+    for(let k=0;k<2;k++){
+      const keys=Object.keys(s.p[lead].res).filter(r=>s.p[lead].res[r]>0);
+      if(keys.length){const r=keys[Math.floor(Math.random()*keys.length)];s.p[lead].res[r]--;}}
+    logMsg(`Le Gris-Noir extrait les ressources de J${lead}.`,"dmg");}},
+  {n:"Désherbage Forcé", t:"Détruit un obstacle végétal. (Aucun obstacle en MVP : sans effet.)", fx:s=>{
+    logMsg("Désherbage Forcé : aucun obstacle sur le plateau. Le drone repart frustré.");}},
+  {n:"Canicule Urbaine", t:"Toutes les unités en Clairière : -1 VIT.", fx:s=>{
+    unitsOnBoard().forEach(u=>{if(MAP[u.cell]==="CL")hurt(u,1,"Canicule");});}},
+  {n:"Drone de Surveillance", t:"Aucune attaque à distance (Portée 2+) ce round.", fx:s=>{s.flags.drone=true;}},
+  {n:"Absorption des Sols", t:"Un Sol Fertile aléatoire devient Rocaille Sèche.", fx:s=>{
+    const sf=s.board.map((c,i)=>i).filter(i=>MAP[i]==="SF");
+    if(sf.length){const i=sf[Math.floor(Math.random()*sf.length)];
+      MAP[i]="RS";logMsg(`Le Sol Fertile ${lbl(i)} se dessèche en Rocaille.`,"dmg");}}},
+];
+
+/* ══════════════ ÉTAT ══════════════ */
+const PHASES = ["ÉVÉNEMENT","PRODUCTION","CROISSANCE","MOUVEMENT","COMBAT","CONTRÔLE"];
+const PLAYTEST_MAX_ROUNDS = 6;
+const PLAYTEST_DOMINATION_ROUND = 5;
+let S = {
+  board: MAP.map(()=>({unit:null,poll:0})),
+  p: {
+    1:{res:{eau:1,nut:2,sol:1,bio:1}, recruited:false},
+    2:{res:{eau:3,nut:1,sol:0,bio:1}, recruited:false},
+  },
+  round:1, phase:-1, active:1,
+  units:{}, nextId:1,
+  flags:{}, sel:null, pick:null, started:false, over:false, winner:null, winReason:"", log:[],
+  deck: shuffle([...EVENTS]), gnDeck: shuffle([...GRISNOIR]),
+};
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function lbl(i){return `${Math.floor(i/6)+1}-${i%6+1}`;}
+function gainRes(j,r,v){S.p[j].res[r]=Math.min(6,S.p[j].res[r]+v);}
+function mkUnit(type, cell, j){
+  const b=UNITS[type];
+  const u={
+    id:S.nextId++,type,j,cell,vit:b.vit,
+    moved:0,movedThisRound:0,attacked:false,mk:{},statuses:{},
+    activationStartCell:null,movePath:[],isDefending:false
+  };
+  S.units[u.id]=u; S.board[cell].unit=u.id; return u;
+}
+function unitsOnBoard(){return Object.values(S.units).filter(u=>u.vit>0);}
+function unitAt(i){const id=S.board[i].unit;return id?S.units[id]:null;}
+function isWet(i){return MAP[i]==="ZH"||MAP[i]==="BA";}
+function xy(i){return [i%6,Math.floor(i/6)];}
+function dist(a,b){const[ax,ay]=xy(a),[bx,by]=xy(b);return Math.abs(ax-bx)+Math.abs(ay-by);}
+
+/* Statuts temporaires MVP v0.2.2 :
+   Entrave et Ralentissement affectent la prochaine Phase Mouvement du propriétaire
+   de l'unité, puis expirent explicitement à la fin de cette phase. */
+function applyStatus(u,key){
+  u.statuses[key] = {expiresAfterMovementOfPlayer:u.j};
+}
+function hasStatus(u,key){
+  return !!(u.statuses&&u.statuses[key]);
+}
+function expireMovementStatusesFor(j){
+  unitsOnBoard().forEach(u=>{
+    if(u.j!==j)return;
+    ["entrave","ralenti"].forEach(k=>{
+      if(u.statuses[k]&&u.statuses[k].expiresAfterMovementOfPlayer===j)delete u.statuses[k];
+    });
+  });
+}
+function resetRoundUnitFlags(){
+  unitsOnBoard().forEach(u=>{
+    u.moved=0;u.movedThisRound=0;u.attacked=false;
+    u.activationStartCell=null;u.movePath=[];u.isDefending=false;
+  });
+}
+function startMovementPhase(j){
+  unitsOnBoard().forEach(u=>{
+    if(u.j!==j)return;
+    u.moved=0;u.activationStartCell=u.cell;u.movePath=[u.cell];u.isDefending=true;
+  });
+  logMsg(`J${j} entre en Mouvement : les unités immobiles défendront à +1 dé DEF.`,"hl");
+}
+
+/* déploiement initial */
+mkUnit("tomate",2,1); mkUnit("carotte",3,1);
+mkUnit("nenuphar",32,2); mkUnit("roseau",33,2);
+
+/* ══════════════ RENDU ══════════════ */
+const $=id=>document.getElementById(id);
+function render(){
+  $("phases").innerHTML=PHASES.map((p,i)=>
+    `<div class="phase ${i===S.phase?'active':''}">${p}</div>`).join("");
+  $("statusBanner").textContent = S.started
+    ? `Round ${S.round} — J${S.active} ${S.active===1?"Nourricières":"Hydrophytes"} — ${PHASES[S.phase]||"Préparation"}`
+    : "Round 1 — En attente — Préparation";
+  const B=$("board"); B.innerHTML="";
+  MAP.forEach((t,i)=>{
+    const c=document.createElement("div");
+    c.className=`cell ${t}`;
+    c.innerHTML=`<span class="t">${t}</span>`;
+    if(S.board[i].poll>0)c.innerHTML+=`<span class="poll">${"☠".repeat(Math.min(S.board[i].poll,3))}</span>`;
+    const u=unitAt(i);
+    if(u){
+      c.innerHTML+=`<span class="unit">${UNITS[u.type].ico}</span>
+        <span class="hp j${u.j}">${u.vit}</span>`;
+      const mks=[
+        ...Object.keys(u.statuses||{}).map(k=>MK_ICON[k]||""),
+        ...Object.keys(u.mk).filter(k=>u.mk[k]).map(k=>MK_ICON[k]||"")
+      ].join("");
+      if(mks)c.innerHTML+=`<span class="mkicons">${mks}</span>`;
+    }
+    if(S.sel===i)c.classList.add("sel");
+    if(S.hl&&S.hl.mv&&S.hl.mv.has(i))c.classList.add("mv");
+    if(S.hl&&S.hl.atk&&S.hl.atk.has(i))c.classList.add("atk");
+    if(S.pick&&spawnCells(S.active).includes(i)&&!u)c.classList.add("spawn");
+    c.onclick=()=>clickCell(i);
+    B.appendChild(c);
+  });
+  for(const j of [1,2]){
+    $(`res${j}`).textContent=Object.entries(S.p[j].res).map(([k,v])=>`${RES_ICON[k]}${v}`).join(" ");
+    const uc=unitsOnBoard().filter(u=>u.j===j).length;
+    $(`pv${j}`).textContent=`Terrains contrôlés:${controlled(j).length} · Domination:${dominationControlled(j).length}/4 · Unités:${uc}`;
+    $(`pj${j}`).classList.toggle("turn",S.active===j&&S.started&&!S.over);
+  }
+  $("btnPhase").textContent = !S.started ? "Commencer"
+    : S.phase>=PHASES.length-1 ? "Round suivant"
+    : `Fin de phase → ${PHASES[S.phase+1]||""}`;
+  $("recruitCard").style.display = (S.phase===2&&S.started)?"block":"none";
+  $("btnSkipMove").disabled = !S.started || S.over || S.phase!==3;
+  $("btnSkipCombat").disabled = !S.started || S.over || S.phase!==4;
+  $("btnCancel").disabled = !S.started || S.over || (S.sel===null&&!S.pick);
+  $("btnExport").disabled = !(S.log&&S.log.length);
+  $("btnAutoplay").disabled = false;
+  if(S.phase===2)renderRecruit();
+}
+function renderRecruit(){
+  const L=$("recruitList");
+  L.innerHTML="";
+  ROSTER[S.active].forEach(t=>{
+    const b=UNITS[t];
+    const free=S.flags.pollin;
+    const afford=free||Object.entries(b.cout).every(([r,v])=>S.p[S.active].res[r]>=v);
+    const btn=document.createElement("button");
+    btn.className="rbtn"+(S.pick===t?" picked":"");
+    btn.disabled=S.p[S.active].recruited||!afford;
+    btn.innerHTML=`<span>${b.ico} ${b.nom}</span>
+      <span class="cost">${free?"GRATUIT":Object.entries(b.cout).map(([r,v])=>RES_ICON[r]+v).join("+")}</span>`;
+    btn.onclick=()=>{S.pick=S.pick===t?null:t;S.sel=null;S.hl=null;render();
+      inspect(`Choisis une case libre dans ta zone (2 premières rangées de ton côté).`);};
+    L.appendChild(btn);
+  });
+}
+function spawnCells(j){
+  const rows = j===1?[0,1]:[4,5];
+  return MAP.map((_,i)=>i).filter(i=>rows.includes(Math.floor(i/6)));
+}
+function inspect(html){$("inspector").innerHTML=html;}
+function inspectUnit(u){
+  const b=UNITS[u.type];
+  const statuses=Object.keys(u.statuses||{});
+  const mks=[
+    ...statuses,
+    ...Object.entries(u.mk).filter(([k,v])=>v).map(([k,v])=>`${k}${k==="poll"&&v>1?"×"+v:""}`)
+  ].join(", ");
+  const range=effectiveRange(u);
+  const defense=u.isDefending?" · Défense immobile +1 DEF":"";
+  const charge = u.type==="carotte"
+    ? `<div class="cap">Charge Racinaire : ${hasStraightCharge(u)?"ACTIVE":"inactive"} — 2+ cases en ligne droite ce tour.</div>`
+    : "";
+  inspect(`<b>${b.ico} ${b.nom}</b> — J${u.j}
+    <div class="stats">MV ${effectiveMovePoints(u)}/${b.mv} · ATK ${b.atk} · DEF ${b.def} · VIT ${u.vit}/${b.vit} · Portée ${range}${range!==b.por?`/${b.por}`:""} · Mouvement ${u.moved}${defense}${mks?` · <span style="color:#8E2B2B">${mks}</span>`:""}</div>
+    ${charge}
+    <div class="cap">${b.cap}</div>`);
+}
+function logMsg(m,cls){
+  const L=$("log");
+  const entry=`R${S.round} J${S.active} ${PHASES[S.phase]||"SETUP"} - ${m}`;
+  if(S.log)S.log.push(entry);
+  L.innerHTML+=`<div class="${cls||''}"><span class="r">R${S.round}·</span> ${m}</div>`;
+  L.scrollTop=L.scrollHeight;
+}
+function showDice(atkRolls,atkTh,defRolls,defTh){
+  $("dice").innerHTML=
+   `<div class="dgroup"><span class="dlabel">ATK ${atkTh}+</span>${atkRolls.map(r=>`<div class="die ${r>=atkTh?'hit':''}">${r}</div>`).join("")}</div>
+    <div class="dgroup"><span class="dlabel">DEF ${defTh}+</span>${defRolls.map(r=>`<div class="die ${r>=defTh?'hit':''}">${r}</div>`).join("")}</div>`;
+}
+
+/* ══════════════ MOTEUR ══════════════ */
+function moveCost(i,j){
+  const t=MAP[i];
+  if(t==="ZH"||t==="BA") return j===2?1:2;
+  return 1;
+}
+function movePoints(u){
+  return effectiveMovePoints(u);
+}
+function effectiveMovePoints(u){
+  const b=UNITS[u.type];
+  let mv=b.mv;
+  if(hasStatus(u,"ralenti")) mv-=1;
+  if(hasStatus(u,"entrave")) return 0;
+  if(u.j===2&&isWet(u.cell)) mv+=1;                 // Réseau de Berges
+  if(MAP[u.cell]==="RS"&&b.vit>=3) mv-=1;           // Rocaille : lourds ralentis
+  return Math.max(0, mv - u.moved);
+}
+/* reachable() retourne une Map cell → coût réel (BFS pondéré) */
+function reachable(u){
+  const mv=movePoints(u);
+  const best=new Map([[u.cell,0]]);
+  const q=[[u.cell,0]];
+  while(q.length){
+    const[c,d]=q.shift();
+    const[cx,cy]=xy(c);
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{
+      const nx=cx+dx,ny=cy+dy;
+      if(nx<0||nx>5||ny<0||ny>5)return;
+      const n=ny*6+nx;
+      if(unitAt(n))return;
+      const nd=d+moveCost(n,u.j);
+      if(nd>mv)return;
+      if(best.has(n)&&best.get(n)<=nd)return;
+      best.set(n,nd);q.push([n,nd]);
+    });
+  }
+  best.delete(u.cell);
+  return best;
+}
+/* Ligne droite : même ligne ou colonne, toutes les cases intermédiaires libres */
+function isStraightClear(from,to){
+  const[fx,fy]=xy(from),[tx,ty]=xy(to);
+  if(fx!==tx&&fy!==ty)return false;
+  const steps=Math.max(Math.abs(fx-tx),Math.abs(fy-ty));
+  const sx=Math.sign(tx-fx),sy=Math.sign(ty-fy);
+  for(let k=1;k<steps;k++){
+    if(unitAt((fy+sy*k)*6+(fx+sx*k)))return false;
+  }
+  return true;
+}
+function moveUnit(u,destinationCell,pathCost){
+  const reach=reachable(u);
+  if(!reach.has(destinationCell))return false;
+  const cost=pathCost??reach.get(destinationCell);
+  if(u.activationStartCell===null){
+    u.activationStartCell=u.cell;
+    u.movePath=[u.cell];
+  }
+  const from=u.cell;
+  u.moved+=cost;
+  u.movedThisRound+=cost;
+  u.isDefending=false;
+  S.board[from].unit=null;
+  S.board[destinationCell].unit=u.id;
+  u.cell=destinationCell;
+  u.movePath.push(destinationCell);
+  if(MAP[destinationCell]==="GN"){
+    u.mk.poll=(u.mk.poll||0)+1;
+    logMsg(`${UNITS[u.type].nom} entre dans la Friche : Pollution.`,"dmg");
+  }
+  return true;
+}
+function hasStraightCharge(u){
+  if(!u||u.type!=="carotte"||!u.movePath||u.movePath.length<2)return false;
+  let total=0,axis=null;
+  for(let k=1;k<u.movePath.length;k++){
+    const a=u.movePath[k-1],b=u.movePath[k];
+    const[ax,ay]=xy(a),[bx,by]=xy(b);
+    if(ax!==bx&&ay!==by)return false;
+    const segAxis=ax===bx?"col":"row";
+    if(axis&&axis!==segAxis)return false;
+    axis=segAxis;
+    total+=dist(a,b);
+  }
+  if(total<2)return false;
+  const cells=u.movePath.map(xy);
+  return axis==="col"
+    ? cells.every(([x])=>x===cells[0][0])
+    : cells.every(([,y])=>y===cells[0][1]);
+}
+function effectiveRange(u){
+  const b=UNITS[u.type];
+  return (S.flags.drone&&b.por>1)?1:b.por;
+}
+function targets(u){
+  const b=UNITS[u.type];
+  if(u.attacked)return new Set();
+  let por=effectiveRange(u);       // Drone de Surveillance : pas de tir 2+
+  const out=new Set();
+  unitsOnBoard().forEach(e=>{
+    if(e.j!==u.j&&dist(u.cell,e.cell)<=por)out.add(e.cell);
+  });
+  return out;
+}
+function roll(n){return Array.from({length:Math.max(0,n)},()=>1+Math.floor(Math.random()*6));}
+function hurt(u,n,src){
+  u.vit-=n;
+  logMsg(`${UNITS[u.type].nom} subit ${n} dégât${n>1?"s":""} (${src}).`,"dmg");
+  if(u.vit<=0){
+    const deathCell=u.cell;
+    S.board[u.cell].unit=null;
+    logMsg(`☠ ${UNITS[u.type].nom} est détruit.`,"dmg");
+    /* Sol Fertile (Bible §4) : toute unité détruite sur SF → +1 Nutriment au propriétaire.
+       Compost de Guerre (Bible §2) : Nourricière détruite → +1 Nutriment.
+       Arbitrage v0.2.2 : PAS de cumul. SF prime ; Compost s'applique seulement hors SF.
+       Sinon une Nourricière mourant sur SF vaudrait 2 Nutriments = mort rentable. */
+    if(MAP[deathCell]==="SF"){
+      gainRes(u.j,"nut",1);
+      logMsg(`Sol Fertile : +1 🌱 pour J${u.j} (le sol reprend son dû).`);
+    } else if(u.j===1){
+      gainRes(1,"nut",1);
+      logMsg("Compost de Guerre : +1 🌱 pour J1.");
+    }
+    delete S.units[u.id];
+  }
+}
+function attack(a,d){
+  const ba=UNITS[a.type], bd=UNITS[d.type];
+  let nA=ba.atk, nD=bd.def, thA=4, thD=4;
+  // modificateurs attaque
+  if(MAP[a.cell]==="CL")nA++;
+  if(MAP[a.cell]==="RS")nA--;
+  if(a.mk.poll)nA-=a.mk.poll;
+  if(S.flags.nuit)nA--;
+  if(hasStatus(d,"entrave"))nA++;
+  let ignoreDef=0;
+  const charge=hasStraightCharge(a);
+  if(a.type==="carotte"){
+    logMsg(`Charge Racinaire : ${charge?"active":"non active"}.`,charge?"hl":"");
+  }
+  if(charge){nA++;ignoreDef=1;logMsg("Charge Racinaire : +1 dé ATK, ignore 1 dé DEF.","hl");}
+  // Culture Associée : Nourricières, 2 espèces différentes adjacentes
+  if(a.j===1){
+    const[ax,ay]=xy(a.cell);
+    const ally=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{
+      const nx2=ax+dx,ny2=ay+dy;
+      if(nx2<0||nx2>5||ny2<0||ny2>5)return false;
+      const v=unitAt(ny2*6+nx2);return v&&v.j===1&&v.type!==a.type;
+    });
+    if(ally){nA++;logMsg("Culture Associée : +1 dé ATK.","hl");}
+  }
+  // modificateurs défense
+  if(MAP[d.cell]==="CL")nD--;
+  if(MAP[d.cell]==="RS")nD++;
+  if(d.j===1&&MAP[d.cell]==="SF")thD=3;
+  if(d.j===2&&isWet(d.cell))thD=3;
+  if(S.flags.pesticides&&d.j===1)nD--;
+  if(d.isDefending){nD++;logMsg("Défense immobile : +1 dé DEF.","hl");}
+  nD-=ignoreDef;
+  // alliée adjacente au défenseur : +1 dé DEF
+  const[dx0,dy0]=xy(d.cell);
+  const dAlly=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{
+    const nx2=dx0+dx,ny2=dy0+dy;
+    if(nx2<0||nx2>5||ny2<0||ny2>5)return false;
+    const v=unitAt(ny2*6+nx2);return v&&v.j===d.j&&v.id!==d.id;
+  });
+  if(dAlly)nD++;
+
+  const rA=roll(nA), rD=roll(nD);
+  const hA=rA.filter(r=>r>=thA).length, hD=rD.filter(r=>r>=thD).length;
+  showDice(rA,thA,rD,thD);
+  const dmg=Math.max(0,hA-hD);
+  logMsg(`${UNITS[a.type].nom} attaque ${UNITS[d.type].nom} : ${hA} vs ${hD}.`);
+  a.attacked=true;
+  if(dmg>0){
+    hurt(d,dmg,"combat");
+    if(S.units[d.id]){
+      if(d.type==="tomate"&&dist(a.cell,d.cell)===1){applyStatus(a,"ralenti");logMsg("Coulis de Guerre : attaquant Ralenti.","hl");}
+    }
+    if(a.type==="haricot"&&S.units[d.id]&&dist(a.cell,d.cell)===1){applyStatus(d,"entrave");logMsg("Vrilles d'Abordage : cible Entravée.","hl");}
+  } else logMsg("Aucun dégât ne passe.");
+  // Étreinte Vaseuse : même si l'attaque rate
+  if(S.units[d.id]&&d.type==="algue"&&dist(a.cell,d.cell)===1){
+    applyStatus(a,"entrave");logMsg("Étreinte Vaseuse : attaquant Entravé.","hl");
+  }
+}
+function controlled(j){
+  // MVP simplifié : une case occupée par une unité = contrôlée par son joueur.
+  // Pas encore de persistance de contrôle ni de contestation étendue.
+  const out=[];
+  MAP.forEach((t,i)=>{const u=unitAt(i);if(u&&u.j===j)out.push(i);});
+  return out;
+}
+function isDeploymentCellFor(j,i){
+  const row=Math.floor(i/6);
+  return j===1 ? row<=1 : row>=4;
+}
+function dominationControlled(j){
+  return controlled(j).filter(i=>!isDeploymentCellFor(j,i));
+}
+
+/* ══════════════ PHASES ══════════════ */
+function doEvent(){
+  if(S.deck.length===0)S.deck=shuffle([...EVENTS]);
+  const e=S.deck.pop();
+  $("eName").textContent=e.n; $("eTxt").textContent=e.t;
+  logMsg(`Événement : ${e.n}`,"hl");
+  e.fx(S);
+}
+function doGrisNoir(){
+  if(S.gnDeck.length===0)S.gnDeck=shuffle([...GRISNOIR]);
+  const e=S.gnDeck.pop();
+  $("gnName").textContent=e.n; $("gnTxt").textContent=e.t;
+  logMsg(`GRIS-NOIR : ${e.n}`,"dmg");
+  e.fx(S);
+}
+function doProduction(j){
+  const gains={eau:0,nut:0,sol:0,bio:0};
+  const ctrl=controlled(j);
+  ctrl.forEach(i=>{
+    const prod={...TERR[MAP[i]].prod};
+    if(S.flags.smog)delete prod.sol;
+    if(S.flags.secheresse&&(MAP[i]==="ZH"||MAP[i]==="BA"))return;
+    if(S.flags.fuite===i)return;
+    Object.entries(prod).forEach(([r,v])=>{
+      gains[r]+=Math.max(0,v-S.board[i].poll);
+    });
+  });
+  if(j===1){
+    const nourOnFertile=unitsOnBoard().filter(u=>u.j===1&&MAP[u.cell]==="SF").length;
+    if(nourOnFertile>=2){
+      gains.nut+=1;
+      logMsg("Récolte Commune : +1 Nutriment pour les Nourricières.","hl");
+    }
+  }
+  if(ctrl.length===0){gains.eau++;gains.sol++;}
+  Object.entries(gains).forEach(([r,v])=>{if(v)gainRes(j,r,v);});
+  logMsg(`J${j} produit : ${Object.entries(gains).filter(([,v])=>v).map(([r,v])=>RES_ICON[r]+v).join(" ")||"rien"}`);
+}
+function cleanupRoundFlags(){
+  S.flags={}; // Nuit, Drone, Smog, Sécheresse, Fuite, Pesticides et Pollinisation durent 1 round MVP.
+}
+function resolveControlPhase(){
+  logMsg(`PHASE CONTRÔLE — fin du round ${S.round}`,"hl");
+  // dessiccation nénuphar
+  unitsOnBoard().forEach(u=>{
+    if(u.type==="nenuphar"&&!isWet(u.cell))hurt(u,1,"dessiccation");
+    if(MAP[u.cell]==="BA"&&u.j!==2)hurt(u,1,"fin de round en Bassin");
+  });
+  S.p[1].recruited=false;S.p[2].recruited=false;
+  checkVictory({allowDomination:true});
+  cleanupRoundFlags();
+  resetRoundUnitFlags();
+}
+function totalResources(j){return Object.values(S.p[j].res).reduce((a,b)=>a+b,0);}
+function playtestTiebreak(c1,c2,u1,u2){
+  const r1=totalResources(1), r2=totalResources(2);
+  if(c1!==c2)return {win:c1>c2?1:2, why:`Round 6 : départage aux terrains contrôlés (${c1}-${c2}).`};
+  if(u1!==u2)return {win:u1>u2?1:2, why:`Round 6 : départage aux unités survivantes (${u1}-${u2}).`};
+  if(r1!==r2)return {win:r1>r2?1:2, why:`Round 6 : départage aux ressources restantes (${r1}-${r2}).`};
+  return {win:1, why:"Round 6 : égalité parfaite, avantage d'initiative aux Nourricières."};
+}
+function checkVictory({allowDomination=false}={}){
+  const u1=unitsOnBoard().filter(u=>u.j===1).length;
+  const u2=unitsOnBoard().filter(u=>u.j===2).length;
+  const c1=dominationControlled(1).length, c2=dominationControlled(2).length;
+  let win=0,why="";
+  if(u1===0){win=2;why="Toutes les Nourricières sont détruites.";}
+  else if(u2===0){win=1;why="Tous les Hydrophytes sont détruits.";}
+  else if(allowDomination&&S.round>=PLAYTEST_DOMINATION_ROUND&&c1>=4&&c1>c2){win=1;why=`Domination playtest : ${c1} terrains hors déploiement contrôlés.`;}
+  else if(allowDomination&&S.round>=PLAYTEST_DOMINATION_ROUND&&c2>=4&&c2>c1){win=2;why=`Domination playtest : ${c2} terrains hors déploiement contrôlés.`;}
+  else if(allowDomination&&S.round>=PLAYTEST_MAX_ROUNDS){
+    const tie=playtestTiebreak(c1,c2,u1,u2);
+    win=tie.win;why=tie.why;
+  }
+  if(win){
+    S.over=true;
+    S.winner=win;
+    S.winReason=why;
+    logMsg(`VICTOIRE J${win} — ${why}`,"hl");
+    $("winTitle").textContent = win===1?"🍅 Victoire des Nourricières":"🪷 Victoire des Hydrophytes";
+    $("winTxt").textContent = why;
+    $("overlay").classList.add("show");
+  }
+}
+
+/* ══════════════ INTERACTIONS ══════════════ */
+function clickCell(i){
+  if(S.over||!S.started)return;
+  const u=unitAt(i);
+  // recrutement
+  if(S.phase===2&&S.pick){
+    if(!u&&spawnCells(S.active).includes(i)){
+      const b=UNITS[S.pick];
+      if(!S.flags.pollin)Object.entries(b.cout).forEach(([r,v])=>S.p[S.active].res[r]-=v);
+      mkUnit(S.pick,i,S.active);
+      S.p[S.active].recruited=true;
+      logMsg(`J${S.active} recrute ${b.nom}.`,"hl");
+      S.pick=null;render();return;
+    }
+  }
+  // mouvement
+  if(S.phase===3){
+    if(S.sel!==null&&S.hl&&S.hl.mv.has(i)){
+      const su=unitAt(S.sel);
+      const cost=S.hl.mv.get(i);           // coût réel BFS
+      moveUnit(su,i,cost);
+      S.sel=null;S.hl=null;render();inspectUnit(su);return;
+    }
+    if(u&&u.j===S.active){
+      S.sel=i;S.hl={mv:reachable(u),atk:new Set()};render();inspectUnit(u);return;
+    }
+  }
+  // combat
+  if(S.phase===4){
+    if(S.sel!==null&&S.hl&&S.hl.atk.has(i)){
+      const a=unitAt(S.sel), d=unitAt(i);
+      attack(a,d);
+      S.sel=null;S.hl=null;render();checkVictory();return;
+    }
+    if(u&&u.j===S.active&&!u.attacked){
+      S.sel=i;S.hl={mv:new Map(),atk:targets(u)};render();inspectUnit(u);return;
+    }
+  }
+  // inspection simple
+  S.sel=i;S.hl=null;render();
+  if(u)inspectUnit(u);
+  else inspect(`<b>${TERR[MAP[i]].nom}</b>${S.board[i].poll?` — Pollution ×${S.board[i].poll}`:""}
+    <div class="cap">${Object.entries(TERR[MAP[i]].prod).map(([r,v])=>`Produit ${RES_ICON[r]}${v}/tour`).join(" · ")||"Terrain stérile."}</div>`);
+}
+
+function advancePhase(){
+  if(S.over)return;
+  if(!S.started){S.started=true;S.phase=0;doEvent();render();return;}
+  S.sel=null;S.hl=null;S.pick=null;
+  S.phase++;
+  if(S.phase===3)startMovementPhase(S.active);
+  if(S.phase===4)expireMovementStatusesFor(S.active);
+  if(S.phase===1){doProduction(1);doProduction(2);}
+  if(S.phase===5){ // fin d'activation du joueur actif
+    if(S.active===1){
+      S.active=2;S.phase=2;
+      logMsg("— Aux Hydrophytes de jouer —","hl");
+    } else {
+      resolveControlPhase();
+      render();
+      if(S.over)return;
+      S.round++;S.active=1;S.phase=0;
+      logMsg(`═══ ROUND ${S.round} ═══`,"hl");
+      doEvent();
+      if(S.round%2===0)doGrisNoir();
+    }
+  }
+  render();
+}
+$("btnPhase").onclick=advancePhase;
+$("btnSkipMove").onclick=()=>{if(S.phase===3){logMsg(`J${S.active} passe le Mouvement.`,"hl");advancePhase();}};
+$("btnSkipCombat").onclick=()=>{if(S.phase===4){logMsg(`J${S.active} passe le Combat.`,"hl");advancePhase();}};
+$("btnCancel").onclick=()=>{S.sel=null;S.hl=null;S.pick=null;inspect("Sélection annulée.");render();};
+function buildLogExportLines(){
+  const units1=unitsOnBoard().filter(u=>u.j===1).length;
+  const units2=unitsOnBoard().filter(u=>u.j===2).length;
+  const res1=Object.entries(S.p[1].res).map(([k,v])=>`${k}:${v}`).join(", ");
+  const res2=Object.entries(S.p[2].res).map(([k,v])=>`${k}:${v}`).join(", ");
+  return [
+    "GreenWar v0.2.5 — Autoplay Test Harness",
+    `Round actuel : ${S.round}`,
+    `Joueur actif : J${S.active}`,
+    `Phase actuelle : ${PHASES[S.phase]||"SETUP"}`,
+    `Terrains contrôlés J1/J2 : ${controlled(1).length}/${controlled(2).length}`,
+    `Terrains de domination J1/J2 : ${dominationControlled(1).length}/${dominationControlled(2).length}`,
+    `Unités survivantes J1/J2 : ${units1}/${units2}`,
+    `Ressources finales J1 : ${res1}`,
+    `Ressources finales J2 : ${res2}`,
+    `Vainqueur : ${S.winner?`J${S.winner}`:"aucun"}`,
+    `Raison de victoire : ${S.winReason||"partie en cours"}`,
+    "",
+    "LOG",
+    "---",
+    ...(S.log||[])
+  ];
+}
+function exportLog(){
+  const lines=buildLogExportLines();
+  const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`greenwar_playtest_full_log_round_${S.round}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+$("btnExport").onclick=exportLog;
+
+function autoplayInitialState(){
+  const s=makeTestState();
+  s.p={
+    1:{res:{eau:1,nut:2,sol:1,bio:1}, recruited:false},
+    2:{res:{eau:3,nut:1,sol:0,bio:1}, recruited:false},
+  };
+  s.round=1;s.phase=0;s.active=1;s.started=true;s.over=false;s.winner=null;s.winReason="";s.log=[];
+  s.deck=shuffle([...EVENTS]);
+  s.gnDeck=shuffle([...GRISNOIR]);
+  return s;
+}
+function autoplaySetupUnits(){
+  mkUnit("tomate",2,1);mkUnit("carotte",3,1);
+  mkUnit("nenuphar",32,2);mkUnit("roseau",33,2);
+}
+function canAffordUnit(j,type){
+  if(S.flags.pollin)return true;
+  return Object.entries(UNITS[type].cout).every(([r,v])=>S.p[j].res[r]>=v);
+}
+function autoplayRecruit(j){
+  if(S.p[j].recruited)return;
+  const roster=ROSTER[j];
+  const counts=Object.fromEntries(roster.map(t=>[t,unitsOnBoard().filter(u=>u.j===j&&u.type===t).length]));
+  const preferred=[...roster].sort((a,b)=>counts[a]-counts[b]);
+  const type=preferred.find(t=>canAffordUnit(j,t));
+  if(!type)return;
+  const cell=spawnCells(j).find(i=>!unitAt(i));
+  if(cell===undefined)return;
+  if(!S.flags.pollin)Object.entries(UNITS[type].cout).forEach(([r,v])=>S.p[j].res[r]-=v);
+  mkUnit(type,cell,j);
+  S.p[j].recruited=true;
+  logMsg(`Autoplay J${j} recrute ${UNITS[type].nom}.`,"hl");
+}
+function autoplayMove(j){
+  const center=[14,15,20,21,13,16,19,22];
+  unitsOnBoard().filter(u=>u.j===j).forEach(u=>{
+    const reach=reachable(u);
+    if(!reach.size)return;
+    let best=null,bestScore=Infinity;
+    reach.forEach((cost,cell)=>{
+      const central=Math.min(...center.map(c=>dist(cell,c)));
+      const deployPenalty=isDeploymentCellFor(j,cell)?4:0;
+      const score=central+deployPenalty+cost/10;
+      if(score<bestScore){bestScore=score;best={cell,cost};}
+    });
+    if(best)moveUnit(u,best.cell,best.cost);
+  });
+}
+function autoplayAttack(j,metrics){
+  const attackers=unitsOnBoard().filter(u=>u.j===j&&!u.attacked);
+  for(const a of attackers){
+    const cells=[...targets(a)];
+    if(!cells.length)continue;
+    const d=cells.map(unitAt).filter(Boolean).sort((x,y)=>x.vit-y.vit)[0];
+    if(!d)continue;
+    const before=d.vit;
+    const attackerType=a.type;
+    const defenderType=d.type;
+    attack(a,d);
+    const after=S.units[d.id]?S.units[d.id].vit:0;
+    const dealt=Math.max(0,before-after);
+    metrics.damageByType[attackerType]=(metrics.damageByType[attackerType]||0)+dealt;
+    if(!S.units[d.id])metrics.deathsByType[defenderType]=(metrics.deathsByType[defenderType]||0)+1;
+    checkVictory();
+    if(S.over)break;
+  }
+}
+function autoplayDrawEvents(metrics){
+  doEvent();
+  metrics.events.push($("eName").textContent);
+  if(S.round%2===0){
+    doGrisNoir();
+    metrics.events.push(`Gris-Noir : ${$("gnName").textContent}`);
+  }
+}
+function autoplayPlayGame(index){
+  S=autoplayInitialState();
+  autoplaySetupUnits();
+  const metrics={damageByType:{},deathsByType:{},events:[]};
+  while(!S.over&&S.round<=PLAYTEST_MAX_ROUNDS){
+    S.phase=0;S.active=1;autoplayDrawEvents(metrics);
+    S.phase=1;doProduction(1);doProduction(2);
+    for(const j of [1,2]){
+      S.active=j;
+      S.phase=2;autoplayRecruit(j);
+      S.phase=3;startMovementPhase(j);autoplayMove(j);
+      S.phase=4;expireMovementStatusesFor(j);autoplayAttack(j,metrics);
+      if(S.over)break;
+    }
+    if(S.over)break;
+    S.phase=5;resolveControlPhase();
+    if(S.over)break;
+    S.round++;
+  }
+  if(!S.over){
+    S.round=PLAYTEST_MAX_ROUNDS;
+    S.phase=5;
+    checkVictory({allowDomination:true});
+  }
+  return {
+    game:index,
+    winner:S.winner,
+    winnerFaction:S.winner===1?"Nourricières":S.winner===2?"Hydrophytes":"aucun",
+    round:Math.min(S.round,PLAYTEST_MAX_ROUNDS),
+    reason:S.winReason||"Partie terminée sans vainqueur",
+    controlled:{j1:controlled(1).length,j2:controlled(2).length},
+    domination:{j1:dominationControlled(1).length,j2:dominationControlled(2).length},
+    units:{j1:unitsOnBoard().filter(u=>u.j===1).length,j2:unitsOnBoard().filter(u=>u.j===2).length},
+    resources:{j1:{...S.p[1].res},j2:{...S.p[2].res}},
+    damageByType:{...metrics.damageByType},
+    deathsByType:{...metrics.deathsByType},
+    events:[...metrics.events],
+  };
+}
+function countBy(items,keyFn){
+  return items.reduce((acc,item)=>{const k=keyFn(item);acc[k]=(acc[k]||0)+1;return acc;},{});
+}
+function topEntries(obj,limit=3,asc=false){
+  return Object.entries(obj).sort((a,b)=>asc?a[1]-b[1]:b[1]-a[1]).slice(0,limit);
+}
+function summarizeAutoplay(results){
+  const wins=countBy(results,r=>r.winnerFaction);
+  const winsByPlayer=countBy(results,r=>r.winner?`J${r.winner}`:"aucun");
+  const causes=countBy(results,r=>r.reason);
+  const events={};
+  const damage={}, deaths={};
+  results.forEach(r=>{
+    r.events.forEach(e=>events[e]=(events[e]||0)+1);
+    Object.entries(r.damageByType).forEach(([k,v])=>damage[k]=(damage[k]||0)+v);
+    Object.entries(r.deathsByType).forEach(([k,v])=>deaths[k]=(deaths[k]||0)+v);
+  });
+  const unitUsefulness={};
+  Object.keys(UNITS).forEach(k=>unitUsefulness[k]=(damage[k]||0)-(deaths[k]||0));
+  const unitStats=Object.fromEntries(Object.keys(UNITS).map(k=>[k,{
+    damage:damage[k]||0,
+    deaths:deaths[k]||0,
+    usefulness:unitUsefulness[k]||0
+  }]));
+  const eventStats=Object.fromEntries(Object.entries(events).map(([k,v])=>[k,{
+    draws:v,
+    frequency:v/Math.max(1,results.length)
+  }]));
+  const winRate={
+    J1:(winsByPlayer.J1||0)/Math.max(1,results.length),
+    J2:(winsByPlayer.J2||0)/Math.max(1,results.length),
+    aucun:(winsByPlayer.aucun||0)/Math.max(1,results.length)
+  };
+  const summary={
+    parties:results.length,
+    victoiresJ1:winsByPlayer.J1||0,
+    victoiresJ2:winsByPlayer.J2||0,
+    tauxVictoire:winRate,
+    roundMoyenFin:results.reduce((a,r)=>a+r.round,0)/Math.max(1,results.length),
+    causesVictoire:causes,
+    statsParUnite:unitStats,
+    statsParEvenement:eventStats,
+    winRates:Object.fromEntries(Object.entries(wins).map(([k,v])=>[k,`${Math.round(v/results.length*100)}% (${v}/${results.length})`])),
+    averageDuration:results.reduce((a,r)=>a+r.round,0)/Math.max(1,results.length),
+    victoryCauses:causes,
+    mostUsefulUnits:topEntries(unitUsefulness,3,false),
+    leastUsefulUnits:topEntries(unitUsefulness,3,true),
+    frequentCards:topEntries(events,5,false),
+  };
+  summary.table=[
+    ...Object.entries(summary.winRates).map(([name,value])=>({category:"taux de victoire",name,value})),
+    {category:"durée moyenne",name:"rounds",value:summary.averageDuration.toFixed(2)},
+    ...topEntries(summary.victoryCauses,5,false).map(([name,value])=>({category:"causes de victoire",name,value})),
+    ...summary.mostUsefulUnits.map(([name,value])=>({category:"unités les plus utiles",name,value})),
+    ...summary.leastUsefulUnits.map(([name,value])=>({category:"unités les moins utiles",name,value})),
+    ...summary.frequentCards.map(([name,value])=>({category:"cartes fréquentes",name,value})),
+  ];
+  return summary;
+}
+window.GreenWarAutoplay = {
+  run(n=1){
+    const count=Math.max(1,Math.floor(Number(n)||1));
+    const savedS=S, savedMap=[...MAP], savedLog=$("log").innerHTML, savedOverlay=$("overlay").classList.contains("show");
+    const results=[];
+    try{
+      for(let i=1;i<=count;i++){
+        MAP.splice(0,MAP.length,...savedMap);
+        results.push(autoplayPlayGame(i));
+      }
+    } finally {
+      MAP.splice(0,MAP.length,...savedMap);
+      S=savedS;
+      $("log").innerHTML=savedLog;
+      $("overlay").classList.toggle("show",savedOverlay);
+      render();
+    }
+    const summary=summarizeAutoplay(results);
+    console.table(summary.table);
+    return {
+      parties:count,
+      victoiresJ1:summary.victoiresJ1,
+      victoiresJ2:summary.victoiresJ2,
+      tauxVictoire:summary.tauxVictoire,
+      roundMoyenFin:summary.roundMoyenFin,
+      causesVictoire:summary.causesVictoire,
+      statsParUnite:summary.statsParUnite,
+      statsParEvenement:summary.statsParEvenement,
+      results,
+      summary
+    };
+  }
+};
+$("btnAutoplay").onclick=()=>{
+  const report=window.GreenWarAutoplay.run(20);
+  const wins=Object.entries(report.summary.winRates).map(([k,v])=>`${k}: ${v}`).join(" · ");
+  logMsg(`Autoplay x20 : ${wins} · durée moyenne ${report.summary.averageDuration.toFixed(2)} rounds.`,"hl");
+};
+
+function makeTestState(){
+  return {
+    board: MAP.map(()=>({unit:null,poll:0})),
+    p: {
+      1:{res:{eau:0,nut:0,sol:0,bio:0}, recruited:false},
+      2:{res:{eau:0,nut:0,sol:0,bio:0}, recruited:false},
+    },
+    round:1, phase:3, active:1,
+    units:{}, nextId:1,
+    flags:{}, sel:null, pick:null, started:true, over:false, winner:null, winReason:"", log:[],
+    deck: shuffle([...EVENTS]), gnDeck: shuffle([...GRISNOIR]),
+  };
+}
+function withTestState(fn){
+  const savedS=S, savedMap=[...MAP];
+  S=makeTestState();
+  try{return fn();}
+  finally{
+    MAP.splice(0,MAP.length,...savedMap);
+    S=savedS;
+    $("overlay").classList.toggle("show",S.over);
+    render();
+  }
+}
+function testResult(name,fn){
+  try{
+    const pass=!!fn();
+    return {test:name,status:pass?"PASS":"FAIL"};
+  }catch(err){
+    return {test:name,status:"ERROR",detail:err.message};
+  }
+}
+window.GreenWarTests = {
+  run(){
+    const results=[
+      testResult("Charge droite OK",()=>withTestState(()=>{
+        const c=mkUnit("carotte",0,1);
+        c.movePath=[0,6,12];c.moved=2;
+        return hasStraightCharge(c)===true;
+      })),
+      testResult("Charge cassée KO",()=>withTestState(()=>{
+        const c=mkUnit("carotte",0,1);
+        c.movePath=[0,1,7];c.moved=2;
+        return hasStraightCharge(c)===false;
+      })),
+      testResult("Entrave affecte le prochain mouvement",()=>withTestState(()=>{
+        const n=mkUnit("nenuphar",0,2);
+        applyStatus(n,"entrave");
+        const blocked=effectiveMovePoints(n)===0;
+        expireMovementStatusesFor(2);
+        return blocked&&effectiveMovePoints(n)>0&&!hasStatus(n,"entrave");
+      })),
+      testResult("Ralentissement affecte le prochain mouvement",()=>withTestState(()=>{
+        const r=mkUnit("roseau",0,2);
+        applyStatus(r,"ralenti");
+        return effectiveMovePoints(r)===1;
+      })),
+      testResult("Pollution réduit la production",()=>withTestState(()=>{
+        MAP[0]="SF";S.board[0].poll=1;mkUnit("tomate",0,1);
+        doProduction(1);
+        return S.p[1].res.nut===0;
+      })),
+      testResult("Sol Fertile à la mort sans double gain",()=>withTestState(()=>{
+        MAP[0]="SF";let t=mkUnit("tomate",0,1);hurt(t,99,"test");
+        const tomateSF=S.p[1].res.nut===1;
+        S.p[1].res.nut=0;MAP[1]="CL";t=mkUnit("tomate",1,1);hurt(t,99,"test");
+        const tomateCompost=S.p[1].res.nut===1;
+        S.p[2].res.nut=0;MAP[2]="SF";let n=mkUnit("nenuphar",2,2);hurt(n,99,"test");
+        const nenupharSF=S.p[2].res.nut===1;
+        S.p[2].res.nut=0;MAP[3]="CL";n=mkUnit("nenuphar",3,2);hurt(n,99,"test");
+        return tomateSF&&tomateCompost&&nenupharSF&&S.p[2].res.nut===0;
+      })),
+      testResult("Gris-Noir tous les 2 rounds",()=>withTestState(()=>{
+        S.gnDeck=[GRISNOIR.find(c=>c.n==="Désherbage Forcé")];
+        const before=S.gnDeck.length;
+        S.round=2;if(S.round%2===0)doGrisNoir();
+        const drewRound2=S.gnDeck.length===before-1;
+        const after=S.gnDeck.length;
+        S.round=3;if(S.round%2===0)doGrisNoir();
+        return drewRound2&&S.gnDeck.length===after;
+      })),
+      testResult("Drone de Surveillance temporaire",()=>withTestState(()=>{
+        const r=mkUnit("roseau",0,2);
+        S.flags.drone=true;
+        const blocked=effectiveRange(r)===1;
+        cleanupRoundFlags();
+        return blocked&&effectiveRange(r)===3;
+      })),
+      testResult("Smog Industriel immédiat",()=>withTestState(()=>{
+        MAP[0]="CL";mkUnit("tomate",0,1);
+        const smog=GRISNOIR.find(c=>c.n==="Smog Industriel");
+        smog.fx(S);
+        doProduction(1);
+        return S.flags.smog===true&&!S.flags.smogNext&&S.p[1].res.sol===0;
+      })),
+      testResult("Fin de partie playtest round 6",()=>withTestState(()=>{
+        mkUnit("tomate",0,1);mkUnit("carotte",1,1);mkUnit("nenuphar",35,2);
+        S.round=PLAYTEST_MAX_ROUNDS;
+        checkVictory({allowDomination:true});
+        return S.over===true&&$("winTitle").textContent.includes("Nourricières");
+      })),
+      testResult("Domination non déclenchée hors Phase CONTRÔLE",()=>withTestState(()=>{
+        [12,13,14,15].forEach(i=>mkUnit("tomate",i,1));
+        mkUnit("nenuphar",35,2);
+        S.round=PLAYTEST_DOMINATION_ROUND;
+        checkVictory();
+        const noEarlyWin=!S.over;
+        checkVictory({allowDomination:true});
+        return noEarlyWin&&S.over===true&&S.winner===1;
+      })),
+      testResult("Zones de déploiement exclues de la domination",()=>withTestState(()=>{
+        [0,1,6,7].forEach(i=>mkUnit("tomate",i,1));
+        [28,29,34,35].forEach(i=>mkUnit("nenuphar",i,2));
+        return controlled(1).length===4
+          && controlled(2).length===4
+          && dominationControlled(1).length===0
+          && dominationControlled(2).length===0;
+      })),
+      testResult("Charge Racinaire active détectée",()=>withTestState(()=>{
+        const c=mkUnit("carotte",0,1);
+        c.movePath=[0,6,12];c.moved=2;
+        inspectUnit(c);
+        return hasStraightCharge(c)==true
+          && $("inspector").innerHTML.includes("Charge Racinaire")
+          && $("inspector").innerHTML.includes("ACTIVE")
+          && $("inspector").innerHTML.includes("2+ cases en ligne droite ce tour");
+      })),
+      testResult("Export log contient le résumé",()=>withTestState(()=>{
+        mkUnit("tomate",12,1);mkUnit("nenuphar",35,2);
+        S.round=4;S.active=2;S.phase=4;S.log.push("combat test");
+        const txt=buildLogExportLines().join("\n");
+        return txt.includes("GreenWar v0.2.5")
+          && txt.includes("Round actuel : 4")
+          && txt.includes("Joueur actif : J2")
+          && txt.includes("Terrains contrôlés J1/J2")
+          && txt.includes("Terrains de domination J1/J2")
+          && txt.includes("Unités survivantes J1/J2")
+          && txt.includes("Ressources finales J1")
+          && txt.includes("Vainqueur : aucun")
+          && txt.includes("combat test");
+      })),
+      testResult("Autoplay run existe",()=>typeof window.GreenWarAutoplay?.run==="function"),
+      testResult("Autoplay run(3) retourne 3 résultats",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return report&&Array.isArray(report.results)&&report.results.length===3;
+      }),
+      testResult("Autoplay ne dépasse pas 6 rounds",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return report.results.every(r=>r.round<=PLAYTEST_MAX_ROUNDS);
+      }),
+      testResult("Autoplay résultats avec vainqueur ou raison",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return report.results.every(r=>r.winner||r.reason);
+      }),
+    ];
+    console.table(results);
+    return results;
+  }
+};
+
+logMsg("GreenWar v0.2.5 Autoplay Test Harness — Nourricières (haut) vs Hydrophytes (bas).","hl");
+logMsg("GreenWar v0.2.5 — Autoplay Test Harness. Mode Playtest inchangé, avec window.GreenWarAutoplay.run(n).");
+render();
+</script>
+</body>
+</html>
