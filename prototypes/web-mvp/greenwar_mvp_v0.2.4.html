@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GreenWar — Prototype v0.2.3 Playtest Comfort Build</title>
+<title>GreenWar v0.2.4 — Control & Balance Patch</title>
 <style>
 :root{
   --soil:#141008;
@@ -195,7 +195,7 @@ button.act.utility{font-size:.82rem;padding:7px 12px;color:var(--parchment2)}
 </head>
 <body>
 <div class="wrap">
-  <h1>GREENWAR <span class="sub">La guerre ne fut pas déclarée. Elle germa. — Prototype v0.2.3 Playtest Comfort Build</span></h1>
+  <h1>GREENWAR <span class="sub">La guerre ne fut pas déclarée. Elle germa. — v0.2.4 Control & Balance Patch</span></h1>
 
   <div class="phases" id="phases"></div>
   <div class="status-banner" id="statusBanner">Round 1 — Joueur actif — Phase</div>
@@ -368,7 +368,7 @@ let S = {
   },
   round:1, phase:-1, active:1,
   units:{}, nextId:1,
-  flags:{}, sel:null, pick:null, started:false, over:false, log:[],
+  flags:{}, sel:null, pick:null, started:false, over:false, winner:null, winReason:"", log:[],
   deck: shuffle([...EVENTS]), gnDeck: shuffle([...GRISNOIR]),
 };
 
@@ -459,7 +459,7 @@ function render(){
   for(const j of [1,2]){
     $(`res${j}`).textContent=Object.entries(S.p[j].res).map(([k,v])=>`${RES_ICON[k]}${v}`).join(" ");
     const uc=unitsOnBoard().filter(u=>u.j===j).length;
-    $(`pv${j}`).textContent=`Terrains contrôlés:${controlled(j).length}/4 · Unités:${uc}`;
+    $(`pv${j}`).textContent=`Terrains contrôlés:${controlled(j).length} · Domination:${dominationControlled(j).length}/4 · Unités:${uc}`;
     $(`pj${j}`).classList.toggle("turn",S.active===j&&S.started&&!S.over);
   }
   $("btnPhase").textContent = !S.started ? "Commencer"
@@ -503,8 +503,12 @@ function inspectUnit(u){
   ].join(", ");
   const range=effectiveRange(u);
   const defense=u.isDefending?" · Défense immobile +1 DEF":"";
+  const charge = u.type==="carotte"
+    ? `<div class="cap">Charge Racinaire : ${hasStraightCharge(u)?"ACTIVE":"inactive"} — 2+ cases en ligne droite ce tour.</div>`
+    : "";
   inspect(`<b>${b.ico} ${b.nom}</b> — J${u.j}
     <div class="stats">MV ${effectiveMovePoints(u)}/${b.mv} · ATK ${b.atk} · DEF ${b.def} · VIT ${u.vit}/${b.vit} · Portée ${range}${range!==b.por?`/${b.por}`:""} · Mouvement ${u.moved}${defense}${mks?` · <span style="color:#8E2B2B">${mks}</span>`:""}</div>
+    ${charge}
     <div class="cap">${b.cap}</div>`);
 }
 function logMsg(m,cls){
@@ -714,6 +718,13 @@ function controlled(j){
   MAP.forEach((t,i)=>{const u=unitAt(i);if(u&&u.j===j)out.push(i);});
   return out;
 }
+function isDeploymentCellFor(j,i){
+  const row=Math.floor(i/6);
+  return j===1 ? row<=1 : row>=4;
+}
+function dominationControlled(j){
+  return controlled(j).filter(i=>!isDeploymentCellFor(j,i));
+}
 
 /* ══════════════ PHASES ══════════════ */
 function doEvent(){
@@ -764,7 +775,7 @@ function resolveControlPhase(){
     if(MAP[u.cell]==="BA"&&u.j!==2)hurt(u,1,"fin de round en Bassin");
   });
   S.p[1].recruited=false;S.p[2].recruited=false;
-  checkVictory();
+  checkVictory({allowDomination:true});
   cleanupRoundFlags();
   resetRoundUnitFlags();
 }
@@ -776,21 +787,23 @@ function playtestTiebreak(c1,c2,u1,u2){
   if(r1!==r2)return {win:r1>r2?1:2, why:`Round 6 : départage aux ressources restantes (${r1}-${r2}).`};
   return {win:1, why:"Round 6 : égalité parfaite, avantage d'initiative aux Nourricières."};
 }
-function checkVictory(){
+function checkVictory({allowDomination=false}={}){
   const u1=unitsOnBoard().filter(u=>u.j===1).length;
   const u2=unitsOnBoard().filter(u=>u.j===2).length;
-  const c1=controlled(1).length, c2=controlled(2).length;
+  const c1=dominationControlled(1).length, c2=dominationControlled(2).length;
   let win=0,why="";
   if(u1===0){win=2;why="Toutes les Nourricières sont détruites.";}
   else if(u2===0){win=1;why="Tous les Hydrophytes sont détruits.";}
-  else if(S.round>=PLAYTEST_DOMINATION_ROUND&&c1>=4&&c1>c2){win=1;why=`Domination playtest : ${c1} terrains contrôlés.`;}
-  else if(S.round>=PLAYTEST_DOMINATION_ROUND&&c2>=4&&c2>c1){win=2;why=`Domination playtest : ${c2} terrains contrôlés.`;}
-  else if(S.round>=PLAYTEST_MAX_ROUNDS){
+  else if(allowDomination&&S.round>=PLAYTEST_DOMINATION_ROUND&&c1>=4&&c1>c2){win=1;why=`Domination playtest : ${c1} terrains hors déploiement contrôlés.`;}
+  else if(allowDomination&&S.round>=PLAYTEST_DOMINATION_ROUND&&c2>=4&&c2>c1){win=2;why=`Domination playtest : ${c2} terrains hors déploiement contrôlés.`;}
+  else if(allowDomination&&S.round>=PLAYTEST_MAX_ROUNDS){
     const tie=playtestTiebreak(c1,c2,u1,u2);
     win=tie.win;why=tie.why;
   }
   if(win){
     S.over=true;
+    S.winner=win;
+    S.winReason=why;
     logMsg(`VICTOIRE J${win} — ${why}`,"hl");
     $("winTitle").textContent = win===1?"🍅 Victoire des Nourricières":"🪷 Victoire des Hydrophytes";
     $("winTxt").textContent = why;
@@ -871,17 +884,35 @@ $("btnPhase").onclick=advancePhase;
 $("btnSkipMove").onclick=()=>{if(S.phase===3){logMsg(`J${S.active} passe le Mouvement.`,"hl");advancePhase();}};
 $("btnSkipCombat").onclick=()=>{if(S.phase===4){logMsg(`J${S.active} passe le Combat.`,"hl");advancePhase();}};
 $("btnCancel").onclick=()=>{S.sel=null;S.hl=null;S.pick=null;inspect("Sélection annulée.");render();};
-function exportLog(){
-  const lines=[
-    "GreenWar v0.2.3 Playtest Comfort Build",
-    `Export log — round ${S.round}, joueur ${S.active}, phase ${PHASES[S.phase]||"SETUP"}`,
+function buildLogExportLines(){
+  const units1=unitsOnBoard().filter(u=>u.j===1).length;
+  const units2=unitsOnBoard().filter(u=>u.j===2).length;
+  const res1=Object.entries(S.p[1].res).map(([k,v])=>`${k}:${v}`).join(", ");
+  const res2=Object.entries(S.p[2].res).map(([k,v])=>`${k}:${v}`).join(", ");
+  return [
+    "GreenWar v0.2.4 — Control & Balance Patch",
+    `Round actuel : ${S.round}`,
+    `Joueur actif : J${S.active}`,
+    `Phase actuelle : ${PHASES[S.phase]||"SETUP"}`,
+    `Terrains contrôlés J1/J2 : ${controlled(1).length}/${controlled(2).length}`,
+    `Terrains de domination J1/J2 : ${dominationControlled(1).length}/${dominationControlled(2).length}`,
+    `Unités survivantes J1/J2 : ${units1}/${units2}`,
+    `Ressources finales J1 : ${res1}`,
+    `Ressources finales J2 : ${res2}`,
+    `Vainqueur : ${S.winner?`J${S.winner}`:"aucun"}`,
+    `Raison de victoire : ${S.winReason||"partie en cours"}`,
     "",
+    "LOG",
+    "---",
     ...(S.log||[])
   ];
+}
+function exportLog(){
+  const lines=buildLogExportLines();
   const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download=`greenwar_playtest_log_round_${S.round}.txt`;
+  a.download=`greenwar_playtest_full_log_round_${S.round}.txt`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -898,7 +929,7 @@ function makeTestState(){
     },
     round:1, phase:3, active:1,
     units:{}, nextId:1,
-    flags:{}, sel:null, pick:null, started:true, over:false, log:[],
+    flags:{}, sel:null, pick:null, started:true, over:false, winner:null, winReason:"", log:[],
     deck: shuffle([...EVENTS]), gnDeck: shuffle([...GRISNOIR]),
   };
 }
@@ -987,8 +1018,48 @@ window.GreenWarTests = {
       testResult("Fin de partie playtest round 6",()=>withTestState(()=>{
         mkUnit("tomate",0,1);mkUnit("carotte",1,1);mkUnit("nenuphar",35,2);
         S.round=PLAYTEST_MAX_ROUNDS;
-        checkVictory();
+        checkVictory({allowDomination:true});
         return S.over===true&&$("winTitle").textContent.includes("Nourricières");
+      })),
+      testResult("Domination non déclenchée hors Phase CONTRÔLE",()=>withTestState(()=>{
+        [12,13,14,15].forEach(i=>mkUnit("tomate",i,1));
+        mkUnit("nenuphar",35,2);
+        S.round=PLAYTEST_DOMINATION_ROUND;
+        checkVictory();
+        const noEarlyWin=!S.over;
+        checkVictory({allowDomination:true});
+        return noEarlyWin&&S.over===true&&S.winner===1;
+      })),
+      testResult("Zones de déploiement exclues de la domination",()=>withTestState(()=>{
+        [0,1,6,7].forEach(i=>mkUnit("tomate",i,1));
+        [28,29,34,35].forEach(i=>mkUnit("nenuphar",i,2));
+        return controlled(1).length===4
+          && controlled(2).length===4
+          && dominationControlled(1).length===0
+          && dominationControlled(2).length===0;
+      })),
+      testResult("Charge Racinaire active détectée",()=>withTestState(()=>{
+        const c=mkUnit("carotte",0,1);
+        c.movePath=[0,6,12];c.moved=2;
+        inspectUnit(c);
+        return hasStraightCharge(c)==true
+          && $("inspector").innerHTML.includes("Charge Racinaire")
+          && $("inspector").innerHTML.includes("ACTIVE")
+          && $("inspector").innerHTML.includes("2+ cases en ligne droite ce tour");
+      })),
+      testResult("Export log contient le résumé",()=>withTestState(()=>{
+        mkUnit("tomate",12,1);mkUnit("nenuphar",35,2);
+        S.round=4;S.active=2;S.phase=4;S.log.push("combat test");
+        const txt=buildLogExportLines().join("\n");
+        return txt.includes("GreenWar v0.2.4")
+          && txt.includes("Round actuel : 4")
+          && txt.includes("Joueur actif : J2")
+          && txt.includes("Terrains contrôlés J1/J2")
+          && txt.includes("Terrains de domination J1/J2")
+          && txt.includes("Unités survivantes J1/J2")
+          && txt.includes("Ressources finales J1")
+          && txt.includes("Vainqueur : aucun")
+          && txt.includes("combat test");
       })),
     ];
     console.table(results);
@@ -996,8 +1067,8 @@ window.GreenWarTests = {
   }
 };
 
-logMsg("GreenWar Prototype v0.2.3 Playtest Comfort Build — Nourricières (haut) vs Hydrophytes (bas).","hl");
-logMsg("Mode Playtest : 6 rounds max. Domination vérifiée dès le round 5, départage au round 6.");
+logMsg("GreenWar v0.2.4 Control & Balance Patch — Nourricières (haut) vs Hydrophytes (bas).","hl");
+logMsg("GreenWar v0.2.4 — Control & Balance Patch. Mode Playtest : 6 rounds max. Domination vérifiée en phase Contrôle dès le round 5.");
 render();
 </script>
 </body>
