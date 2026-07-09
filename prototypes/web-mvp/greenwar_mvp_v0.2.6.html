@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GreenWar v0.2.5 — Autoplay Test Harness</title>
+<title>GreenWar v0.2.6 — Autoplay Balance Diagnostics</title>
 <style>
 :root{
   --soil:#141008;
@@ -195,7 +195,7 @@ button.act.utility{font-size:.82rem;padding:7px 12px;color:var(--parchment2)}
 </head>
 <body>
 <div class="wrap">
-  <h1>GREENWAR <span class="sub">La guerre ne fut pas déclarée. Elle germa. — v0.2.5 Autoplay Test Harness</span></h1>
+  <h1>GREENWAR <span class="sub">La guerre ne fut pas déclarée. Elle germa. — v0.2.6 Autoplay Balance Diagnostics</span></h1>
 
   <div class="phases" id="phases"></div>
   <div class="status-banner" id="statusBanner">Round 1 — Joueur actif — Phase</div>
@@ -941,36 +941,88 @@ function canAffordUnit(j,type){
   if(S.flags.pollin)return true;
   return Object.entries(UNITS[type].cout).every(([r,v])=>S.p[j].res[r]>=v);
 }
-function autoplayRecruit(j){
-  if(S.p[j].recruited)return;
+function autoplayMetricSeed(){
+  return {
+    recruitments:{j1:{},j2:{}},
+    attacksByType:{},damageByType:{},damageTakenByType:{},deathsByType:{},
+    passiveTurns:{j1:0,j2:0},
+    resourcesByRound:[],dominationByRound:[],events:[],choices:[]
+  };
+}
+function metricFactionKey(j){return j===1?"j1":"j2";}
+function metricAdd(obj,key,v=1){obj[key]=(obj[key]||0)+v;}
+function autoplayRecruit(j,metrics){
+  if(S.p[j].recruited)return false;
   const roster=ROSTER[j];
   const counts=Object.fromEntries(roster.map(t=>[t,unitsOnBoard().filter(u=>u.j===j&&u.type===t).length]));
-  const preferred=[...roster].sort((a,b)=>counts[a]-counts[b]);
+  const preferred=[...roster].sort((a,b)=>{
+    if(canAffordUnit(j,a)!==canAffordUnit(j,b))return canAffordUnit(j,a)?-1:1;
+    if(j===1){
+      const nourishOrder={carotte:0,tomate:1,haricot:2};
+      if(counts[a]!==counts[b])return counts[a]-counts[b];
+      return (nourishOrder[a]??9)-(nourishOrder[b]??9);
+    }
+    return counts[a]-counts[b];
+  });
   const type=preferred.find(t=>canAffordUnit(j,t));
-  if(!type)return;
+  if(!type)return false;
   const cell=spawnCells(j).find(i=>!unitAt(i));
-  if(cell===undefined)return;
+  if(cell===undefined)return false;
   if(!S.flags.pollin)Object.entries(UNITS[type].cout).forEach(([r,v])=>S.p[j].res[r]-=v);
   mkUnit(type,cell,j);
   S.p[j].recruited=true;
+  metricAdd(metrics.recruitments[metricFactionKey(j)],type);
+  metrics.choices.push(`J${j} recrute ${UNITS[type].nom}`);
   logMsg(`Autoplay J${j} recrute ${UNITS[type].nom}.`,"hl");
+  return true;
 }
-function autoplayMove(j){
+function autoplayCellScore(u,cell,cost){
   const center=[14,15,20,21,13,16,19,22];
+  const central=Math.min(...center.map(c=>dist(cell,c)));
+  const deployPenalty=isDeploymentCellFor(u.j,cell)?6:0;
+  let score=central*2+deployPenalty+cost/10;
+  if(u.j===1){
+    if(MAP[cell]==="SF"&&u.type==="tomate")score-=5;
+    if(MAP[cell]==="CL")score-=u.type==="tomate"?3:2;
+    if(u.type==="carotte"){
+      const originalPath=[...(u.movePath||[])], originalMoved=u.moved;
+      u.movePath=[u.cell,cell];u.moved+=cost;
+      if(hasStraightCharge(u))score-=8;
+      u.movePath=originalPath;u.moved=originalMoved;
+    }
+    if(u.type==="haricot"){
+      const oldCell=u.cell;
+      u.cell=cell;
+      const hasEntraveTarget=[...targets(u)].some(i=>unitAt(i));
+      u.cell=oldCell;
+      if(hasEntraveTarget)score-=6;
+    }
+  }
+  if(!isDeploymentCellFor(u.j,cell))score-=3;
+  return score;
+}
+function autoplayMove(j,metrics){
+  let acted=false;
   unitsOnBoard().filter(u=>u.j===j).forEach(u=>{
     const reach=reachable(u);
     if(!reach.size)return;
     let best=null,bestScore=Infinity;
     reach.forEach((cost,cell)=>{
-      const central=Math.min(...center.map(c=>dist(cell,c)));
-      const deployPenalty=isDeploymentCellFor(j,cell)?4:0;
-      const score=central+deployPenalty+cost/10;
-      if(score<bestScore){bestScore=score;best={cell,cost};}
+      const score=autoplayCellScore(u,cell,cost);
+      if(score<bestScore){bestScore=score;best={cell,cost,score};}
     });
-    if(best)moveUnit(u,best.cell,best.cost);
+    if(best){
+      const from=u.cell;
+      moveUnit(u,best.cell,best.cost);
+      acted=true;
+      if(j===2)metrics.choices.push(`J2 ${UNITS[u.type].nom} ${lbl(from)}→${lbl(best.cell)} (${MAP[best.cell]}/centre)`);
+      else metrics.choices.push(`J1 ${UNITS[u.type].nom} ${lbl(from)}→${lbl(best.cell)} priorité domination/charge`);
+    }
   });
+  return acted;
 }
 function autoplayAttack(j,metrics){
+  let acted=false;
   const attackers=unitsOnBoard().filter(u=>u.j===j&&!u.attacked);
   for(const a of attackers){
     const cells=[...targets(a)];
@@ -980,14 +1032,20 @@ function autoplayAttack(j,metrics){
     const before=d.vit;
     const attackerType=a.type;
     const defenderType=d.type;
+    metricAdd(metrics.attacksByType,attackerType);
+    if(j===2&&attackerType==="roseau")metrics.choices.push(`J2 Roseau attaque à portée ${dist(a.cell,d.cell)}`);
+    if(j===1&&attackerType==="haricot")metrics.choices.push("J1 Haricot cherche Entrave en attaque");
     attack(a,d);
+    acted=true;
     const after=S.units[d.id]?S.units[d.id].vit:0;
     const dealt=Math.max(0,before-after);
-    metrics.damageByType[attackerType]=(metrics.damageByType[attackerType]||0)+dealt;
-    if(!S.units[d.id])metrics.deathsByType[defenderType]=(metrics.deathsByType[defenderType]||0)+1;
+    metricAdd(metrics.damageByType,attackerType,dealt);
+    metricAdd(metrics.damageTakenByType,defenderType,dealt);
+    if(!S.units[d.id])metricAdd(metrics.deathsByType,defenderType);
     checkVictory();
     if(S.over)break;
   }
+  return acted;
 }
 function autoplayDrawEvents(metrics){
   doEvent();
@@ -997,22 +1055,48 @@ function autoplayDrawEvents(metrics){
     metrics.events.push(`Gris-Noir : ${$("gnName").textContent}`);
   }
 }
-function autoplayPlayGame(index){
+function autoplayControlPhase(metrics,options){
+  if(!options.dominationTarget){
+    resolveControlPhase();
+  } else {
+    logMsg(`PHASE CONTRÔLE — fin du round ${S.round}`,"hl");
+    unitsOnBoard().forEach(u=>{
+      if(u.type==="nenuphar"&&!isWet(u.cell))hurt(u,1,"dessiccation");
+      if(MAP[u.cell]==="BA"&&u.j!==2)hurt(u,1,"fin de round en Bassin");
+    });
+    S.p[1].recruited=false;S.p[2].recruited=false;
+    checkVictory();
+    const target=Number(options.dominationTarget||4);
+    const c1=dominationControlled(1).length, c2=dominationControlled(2).length;
+    if(!S.over&&S.round>=PLAYTEST_DOMINATION_ROUND&&c1>=target&&c1>c2){
+      S.over=true;S.winner=1;S.winReason=`Diagnostic domination cible ${target} : J1 contrôle ${c1} terrains.`;
+    } else if(!S.over&&S.round>=PLAYTEST_DOMINATION_ROUND&&c2>=target&&c2>c1){
+      S.over=true;S.winner=2;S.winReason=`Diagnostic domination cible ${target} : J2 contrôle ${c2} terrains.`;
+    }
+    if(S.over&&S.winner)logMsg(`VICTOIRE J${S.winner} — ${S.winReason}`,"hl");
+    cleanupRoundFlags();
+    resetRoundUnitFlags();
+  }
+  metrics.dominationByRound.push({round:S.round,j1:dominationControlled(1).length,j2:dominationControlled(2).length});
+  metrics.resourcesByRound.push({round:S.round,j1:{...S.p[1].res},j2:{...S.p[2].res}});
+}
+function autoplayPlayGame(index,options={}){
   S=autoplayInitialState();
   autoplaySetupUnits();
-  const metrics={damageByType:{},deathsByType:{},events:[]};
+  const metrics=autoplayMetricSeed();
   while(!S.over&&S.round<=PLAYTEST_MAX_ROUNDS){
     S.phase=0;S.active=1;autoplayDrawEvents(metrics);
     S.phase=1;doProduction(1);doProduction(2);
     for(const j of [1,2]){
       S.active=j;
-      S.phase=2;autoplayRecruit(j);
-      S.phase=3;startMovementPhase(j);autoplayMove(j);
-      S.phase=4;expireMovementStatusesFor(j);autoplayAttack(j,metrics);
+      S.phase=2;const recruited=autoplayRecruit(j,metrics);
+      S.phase=3;startMovementPhase(j);const moved=autoplayMove(j,metrics);
+      S.phase=4;expireMovementStatusesFor(j);const attacked=autoplayAttack(j,metrics);
+      if(!recruited&&!moved&&!attacked)metrics.passiveTurns[metricFactionKey(j)]++;
       if(S.over)break;
     }
     if(S.over)break;
-    S.phase=5;resolveControlPhase();
+    S.phase=5;autoplayControlPhase(metrics,options);
     if(S.over)break;
     S.round++;
   }
@@ -1022,18 +1106,18 @@ function autoplayPlayGame(index){
     checkVictory({allowDomination:true});
   }
   return {
-    game:index,
-    winner:S.winner,
+    game:index,winner:S.winner,
     winnerFaction:S.winner===1?"Nourricières":S.winner===2?"Hydrophytes":"aucun",
-    round:Math.min(S.round,PLAYTEST_MAX_ROUNDS),
-    reason:S.winReason||"Partie terminée sans vainqueur",
+    round:Math.min(S.round,PLAYTEST_MAX_ROUNDS),reason:S.winReason||"Partie terminée sans vainqueur",
     controlled:{j1:controlled(1).length,j2:controlled(2).length},
     domination:{j1:dominationControlled(1).length,j2:dominationControlled(2).length},
     units:{j1:unitsOnBoard().filter(u=>u.j===1).length,j2:unitsOnBoard().filter(u=>u.j===2).length},
     resources:{j1:{...S.p[1].res},j2:{...S.p[2].res}},
-    damageByType:{...metrics.damageByType},
-    deathsByType:{...metrics.deathsByType},
-    events:[...metrics.events],
+    recruitments:metrics.recruitments,attacksByType:{...metrics.attacksByType},
+    damageByType:{...metrics.damageByType},damageTakenByType:{...metrics.damageTakenByType},
+    deathsByType:{...metrics.deathsByType},passiveTurns:{...metrics.passiveTurns},
+    resourcesByRound:[...metrics.resourcesByRound],dominationByRound:[...metrics.dominationByRound],
+    events:[...metrics.events],choices:[...metrics.choices]
   };
 }
 function countBy(items,keyFn){
@@ -1042,96 +1126,88 @@ function countBy(items,keyFn){
 function topEntries(obj,limit=3,asc=false){
   return Object.entries(obj).sort((a,b)=>asc?a[1]-b[1]:b[1]-a[1]).slice(0,limit);
 }
+function sumObj(target,source){
+  Object.entries(source||{}).forEach(([k,v])=>target[k]=(target[k]||0)+v);
+  return target;
+}
 function summarizeAutoplay(results){
-  const wins=countBy(results,r=>r.winnerFaction);
   const winsByPlayer=countBy(results,r=>r.winner?`J${r.winner}`:"aucun");
   const causes=countBy(results,r=>r.reason);
-  const events={};
-  const damage={}, deaths={};
+  const events={}, damage={}, damageTaken={}, deaths={}, attacks={}, recruitJ1={}, recruitJ2={};
+  let passiveJ1=0, passiveJ2=0, resJ1=0, resJ2=0;
   results.forEach(r=>{
     r.events.forEach(e=>events[e]=(events[e]||0)+1);
-    Object.entries(r.damageByType).forEach(([k,v])=>damage[k]=(damage[k]||0)+v);
-    Object.entries(r.deathsByType).forEach(([k,v])=>deaths[k]=(deaths[k]||0)+v);
+    sumObj(damage,r.damageByType);sumObj(damageTaken,r.damageTakenByType);
+    sumObj(deaths,r.deathsByType);sumObj(attacks,r.attacksByType);
+    sumObj(recruitJ1,r.recruitments.j1);sumObj(recruitJ2,r.recruitments.j2);
+    passiveJ1+=r.passiveTurns.j1||0;passiveJ2+=r.passiveTurns.j2||0;
+    resJ1+=totalResourcesFrom(r.resources.j1);resJ2+=totalResourcesFrom(r.resources.j2);
   });
-  const unitUsefulness={};
-  Object.keys(UNITS).forEach(k=>unitUsefulness[k]=(damage[k]||0)-(deaths[k]||0));
   const unitStats=Object.fromEntries(Object.keys(UNITS).map(k=>[k,{
-    damage:damage[k]||0,
-    deaths:deaths[k]||0,
-    usefulness:unitUsefulness[k]||0
+    recruitments:(recruitJ1[k]||0)+(recruitJ2[k]||0),attacks:attacks[k]||0,
+    damage:damage[k]||0,damageTaken:damageTaken[k]||0,deaths:deaths[k]||0,
+    usefulness:(damage[k]||0)-(deaths[k]||0)
   }]));
-  const eventStats=Object.fromEntries(Object.entries(events).map(([k,v])=>[k,{
-    draws:v,
-    frequency:v/Math.max(1,results.length)
-  }]));
-  const winRate={
-    J1:(winsByPlayer.J1||0)/Math.max(1,results.length),
-    J2:(winsByPlayer.J2||0)/Math.max(1,results.length),
-    aucun:(winsByPlayer.aucun||0)/Math.max(1,results.length)
-  };
+  const eventStats=Object.fromEntries(Object.entries(events).map(([k,v])=>[k,{draws:v,frequency:v/Math.max(1,results.length)}]));
+  const averageResources={J1:resJ1/Math.max(1,results.length),J2:resJ2/Math.max(1,results.length)};
+  const topOffense=topEntries(Object.fromEntries(Object.entries(unitStats).map(([k,v])=>[k,v.damage])),3,false);
+  const underused=topEntries(Object.fromEntries(Object.entries(unitStats).map(([k,v])=>[k,v.attacks+v.recruitments])),3,true);
+  const mainCause=topEntries(causes,1,false)[0]||["aucune",0];
   const summary={
-    parties:results.length,
-    victoiresJ1:winsByPlayer.J1||0,
-    victoiresJ2:winsByPlayer.J2||0,
-    tauxVictoire:winRate,
+    parties:results.length,victoiresJ1:winsByPlayer.J1||0,victoiresJ2:winsByPlayer.J2||0,
+    tauxVictoire:{J1:(winsByPlayer.J1||0)/Math.max(1,results.length),J2:(winsByPlayer.J2||0)/Math.max(1,results.length),aucun:(winsByPlayer.aucun||0)/Math.max(1,results.length)},
     roundMoyenFin:results.reduce((a,r)=>a+r.round,0)/Math.max(1,results.length),
-    causesVictoire:causes,
-    statsParUnite:unitStats,
-    statsParEvenement:eventStats,
-    winRates:Object.fromEntries(Object.entries(wins).map(([k,v])=>[k,`${Math.round(v/results.length*100)}% (${v}/${results.length})`])),
-    averageDuration:results.reduce((a,r)=>a+r.round,0)/Math.max(1,results.length),
-    victoryCauses:causes,
-    mostUsefulUnits:topEntries(unitUsefulness,3,false),
-    leastUsefulUnits:topEntries(unitUsefulness,3,true),
-    frequentCards:topEntries(events,5,false),
+    causesVictoire:causes,causePrincipale:{name:mainCause[0],count:mainCause[1]},
+    statsParUnite:unitStats,statsParEvenement:eventStats,
+    recruitments:{J1:recruitJ1,J2:recruitJ2},attacksByType:attacks,
+    passiveTurns:{J1:passiveJ1,J2:passiveJ2},averageResources,
+    factionPlusPassive:passiveJ1===passiveJ2?"égalité":passiveJ1>passiveJ2?"J1":"J2",
+    factionPlusRessourcesNonDepensees:averageResources.J1===averageResources.J2?"égalité":averageResources.J1>averageResources.J2?"J1":"J2",
+    topUnitesOffensives:topOffense,unitesSousUtilisees:underused,
+    cartesFrequentes:topEntries(events,5,false)
   };
   summary.table=[
-    ...Object.entries(summary.winRates).map(([name,value])=>({category:"taux de victoire",name,value})),
-    {category:"durée moyenne",name:"rounds",value:summary.averageDuration.toFixed(2)},
-    ...topEntries(summary.victoryCauses,5,false).map(([name,value])=>({category:"causes de victoire",name,value})),
-    ...summary.mostUsefulUnits.map(([name,value])=>({category:"unités les plus utiles",name,value})),
-    ...summary.leastUsefulUnits.map(([name,value])=>({category:"unités les moins utiles",name,value})),
-    ...summary.frequentCards.map(([name,value])=>({category:"cartes fréquentes",name,value})),
+    {category:"winrate",name:"J1",value:`${Math.round(summary.tauxVictoire.J1*100)}% (${summary.victoiresJ1}/${summary.parties})`},
+    {category:"winrate",name:"J2",value:`${Math.round(summary.tauxVictoire.J2*100)}% (${summary.victoiresJ2}/${summary.parties})`},
+    {category:"round moyen",name:"fin",value:summary.roundMoyenFin.toFixed(2)},
+    {category:"cause principale",name:summary.causePrincipale.name,value:summary.causePrincipale.count},
+    ...summary.topUnitesOffensives.map(([name,value])=>({category:"top unités offensives",name,value})),
+    ...summary.unitesSousUtilisees.map(([name,value])=>({category:"unités sous-utilisées",name,value})),
+    {category:"tours passifs",name:summary.factionPlusPassive,value:`J1 ${passiveJ1} / J2 ${passiveJ2}`},
+    {category:"ressources non dépensées",name:summary.factionPlusRessourcesNonDepensees,value:`J1 ${averageResources.J1.toFixed(2)} / J2 ${averageResources.J2.toFixed(2)}`},
+    ...summary.cartesFrequentes.map(([name,value])=>({category:"cartes fréquentes",name,value}))
   ];
   return summary;
 }
+function totalResourcesFrom(res){return Object.values(res).reduce((a,b)=>a+b,0);}
 window.GreenWarAutoplay = {
-  run(n=1){
+  run(n=1,options={}){
     const count=Math.max(1,Math.floor(Number(n)||1));
     const savedS=S, savedMap=[...MAP], savedLog=$("log").innerHTML, savedOverlay=$("overlay").classList.contains("show");
     const results=[];
     try{
       for(let i=1;i<=count;i++){
         MAP.splice(0,MAP.length,...savedMap);
-        results.push(autoplayPlayGame(i));
+        results.push(autoplayPlayGame(i,options||{}));
       }
     } finally {
-      MAP.splice(0,MAP.length,...savedMap);
-      S=savedS;
-      $("log").innerHTML=savedLog;
-      $("overlay").classList.toggle("show",savedOverlay);
-      render();
+      MAP.splice(0,MAP.length,...savedMap);S=savedS;
+      $("log").innerHTML=savedLog;$("overlay").classList.toggle("show",savedOverlay);render();
     }
     const summary=summarizeAutoplay(results);
     console.table(summary.table);
     return {
-      parties:count,
-      victoiresJ1:summary.victoiresJ1,
-      victoiresJ2:summary.victoiresJ2,
-      tauxVictoire:summary.tauxVictoire,
-      roundMoyenFin:summary.roundMoyenFin,
-      causesVictoire:summary.causesVictoire,
-      statsParUnite:summary.statsParUnite,
-      statsParEvenement:summary.statsParEvenement,
-      results,
-      summary
+      parties:count,options:{...options},victoiresJ1:summary.victoiresJ1,victoiresJ2:summary.victoiresJ2,
+      tauxVictoire:summary.tauxVictoire,roundMoyenFin:summary.roundMoyenFin,
+      causesVictoire:summary.causesVictoire,statsParUnite:summary.statsParUnite,
+      statsParEvenement:summary.statsParEvenement,results,summary
     };
   }
 };
 $("btnAutoplay").onclick=()=>{
   const report=window.GreenWarAutoplay.run(20);
-  const wins=Object.entries(report.summary.winRates).map(([k,v])=>`${k}: ${v}`).join(" · ");
-  logMsg(`Autoplay x20 : ${wins} · durée moyenne ${report.summary.averageDuration.toFixed(2)} rounds.`,"hl");
+  const wins=`J1 ${Math.round(report.tauxVictoire.J1*100)}% · J2 ${Math.round(report.tauxVictoire.J2*100)}%`;
+  logMsg(`Autoplay x20 : ${wins} · round moyen ${report.roundMoyenFin.toFixed(2)} · passifs ${report.summary.factionPlusPassive}.`,"hl");
 };
 
 function makeTestState(){
@@ -1288,14 +1364,34 @@ window.GreenWarTests = {
         const report=window.GreenWarAutoplay.run(3);
         return report.results.every(r=>r.winner||r.reason);
       }),
+      testResult("Autoplay run(5) fonctionne",()=>{
+        const report=window.GreenWarAutoplay.run(5);
+        return report.parties===5&&report.results.length===5;
+      }),
+      testResult("Autoplay dominationTarget 5 fonctionne",()=>{
+        const report=window.GreenWarAutoplay.run(5,{dominationTarget:5});
+        return report.parties===5&&report.options.dominationTarget===5&&report.results.length===5;
+      }),
+      testResult("Autoplay métriques de recrutement existent",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return !!report.summary.recruitments&&!!report.summary.recruitments.J1&&!!report.summary.recruitments.J2;
+      }),
+      testResult("Autoplay métriques attaques par unité existent",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return !!report.summary.attacksByType&&typeof report.summary.attacksByType==="object";
+      }),
+      testResult("Autoplay métriques de tours passifs existent",()=>{
+        const report=window.GreenWarAutoplay.run(3);
+        return !!report.summary.passiveTurns&&Number.isFinite(report.summary.passiveTurns.J1)&&Number.isFinite(report.summary.passiveTurns.J2);
+      }),
     ];
     console.table(results);
     return results;
   }
 };
 
-logMsg("GreenWar v0.2.5 Autoplay Test Harness — Nourricières (haut) vs Hydrophytes (bas).","hl");
-logMsg("GreenWar v0.2.5 — Autoplay Test Harness. Mode Playtest inchangé, avec window.GreenWarAutoplay.run(n).");
+logMsg("GreenWar v0.2.6 Autoplay Balance Diagnostics — Nourricières (haut) vs Hydrophytes (bas).","hl");
+logMsg("GreenWar v0.2.6 — Autoplay Balance Diagnostics. Mode Playtest inchangé, avec window.GreenWarAutoplay.run(n, options).");
 render();
 </script>
 </body>
