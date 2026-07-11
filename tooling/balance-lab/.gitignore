@@ -1,0 +1,4 @@
+# Résultats bruts JSON volumineux : reproductibles à l'identique via les seeds.
+# Les CSV et rapports MD sont versionnés ; les JSON se regénèrent avec :
+#   node simulate.js --config experiments/<nom>.json
+results/*.json
