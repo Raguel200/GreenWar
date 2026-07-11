@@ -1,0 +1,9 @@
+{
+  "name": "baseline_v0.2.6_dt5",
+  "description": "Baseline v0.2.6 en mode diagnostic dominationTarget=5 (reproduction des observations précédentes : durée ~5.15 rounds).",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "heuristic", "2": "heuristic" },
+  "dominationTarget": 5
+}
