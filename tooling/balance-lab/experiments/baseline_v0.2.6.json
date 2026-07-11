@@ -1,0 +1,9 @@
+{
+  "name": "baseline_v0.2.6",
+  "description": "Baseline v0.2.6 — règles officielles (domination cible 4 dès round 5, cap 6 rounds), bots heuristiques du prototype, sièges alternés.",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "heuristic", "2": "heuristic" },
+  "dominationTarget": null
+}

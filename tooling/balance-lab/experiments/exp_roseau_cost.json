@@ -1,0 +1,10 @@
+{
+  "name": "exp_roseau_cost",
+  "description": "EXPÉRIENCE v0.2.7-A — Coût du Roseau-Harponneur porté de {eau:1,sol:1} à {eau:2,sol:1}. Hypothèse : réduire la pression du sniper J2 sans toucher ses stats.",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "heuristic", "2": "heuristic" },
+  "dominationTarget": null,
+  "unitOverrides": { "roseau": { "cout": { "eau": 2, "sol": 1 } } }
+}

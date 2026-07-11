@@ -1,0 +1,10 @@
+{
+  "name": "exp_roseau_portee",
+  "description": "EXPÉRIENCE v0.2.7-B — Portée du Roseau-Harponneur réduite de 3 à 2. Hypothèse : le sniper reste utile mais cesse de contrôler la moitié du plateau.",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "heuristic", "2": "heuristic" },
+  "dominationTarget": null,
+  "unitOverrides": { "roseau": { "por": 2 } }
+}

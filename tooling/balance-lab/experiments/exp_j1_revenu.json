@@ -1,0 +1,10 @@
+{
+  "name": "exp_j1_revenu",
+  "description": "EXPÉRIENCE v0.2.7-C — Revenu Nourricières : +1 Eau et +1 Ensoleillement par round (le bonus en Nutriments est absorbé par le plafond de 6). Hypothèse : J1 manque de carburant pour recruter Carotte/Haricot.",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "heuristic", "2": "heuristic" },
+  "dominationTarget": null,
+  "j1IncomeBonus": { "eau": 1, "sol": 1 }
+}

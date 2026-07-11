@@ -1,0 +1,9 @@
+{
+  "name": "bots_random_vs_random",
+  "description": "DIAGNOSTIC BOTS — aléatoire contrôlé des deux côtés. Si le déséquilibre J2 persiste sans heuristique, il vient des règles, pas du bot.",
+  "games": 1000,
+  "seedBase": "greenwar-v0.2.6",
+  "swapSeats": true,
+  "bots": { "1": "random", "2": "random" },
+  "dominationTarget": null
+}
